@@ -106,7 +106,7 @@ RUN rid=$(</tmp/rid); \
         UpdateMethod=Docker Branch=master >/out/package_info
 
 # The image's health probe, static and on the standard library alone.
-FROM dhi.io/golang:1.27.4-debian13-dev@sha256:fad833d40821cebfb55c0af4b5b2dc966b65b7534880929cee157ca07ab13ffd AS probe
+FROM dhi.io/golang:1.27.4-debian13-dev@sha256:065579ea342afd08d0e1f038866e7f4eed7e913f4be2f29c487db71804fd2506 AS probe
 ARG PROWLARR_VERSION
 WORKDIR /src
 # go.mod's replace names ./.ci, which the build context leaves out: the
