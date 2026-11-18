@@ -22,6 +22,11 @@ import (
 // sweepWithin bounds the sweep of what an earlier run left behind.
 const sweepWithin = 2 * time.Minute
 
+// testAPIKey is the API key every container here is given, as
+// PROWLARR__AUTH__APIKEY or in a config.xml: 32 lowercase hex digits, the
+// form of the key Prowlarr makes for itself.
+const testAPIKey = "9d3f7a2c5e8b1f4a6c0d2e7b9a3f5c18" //nolint:gosec // G101: a made-up key, given only to the throwaway containers this suite runs
+
 // TestMain removes every container, network and volume a run that died
 // left behind, before any test starts its own, and the probe volumes this
 // run made once the tests are done. Without an image there is nothing to
