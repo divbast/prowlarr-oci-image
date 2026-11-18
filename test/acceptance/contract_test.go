@@ -21,8 +21,8 @@ const (
 	// /ping, its health route.
 	appPort = 8080
 	// tmpfsSize is the size of /tmp the README states. Every container
-	// gets exactly this, so no check passes on more room than the
-	// contract grants. Prowlarr stages a backup there: the database and
+	// that runs Prowlarr gets exactly this, so no check passes on more
+	// room than the contract grants. Prowlarr stages a backup there: the database and
 	// config.xml, copied out before it zips them into /config. A backup of
 	// a database holding 50 tags staged 229,962 bytes, which failed on a
 	// 200 KiB /tmp and fitted 512 KiB: twice it rounds up to 512 KiB,
@@ -68,7 +68,9 @@ func TestContract(t *testing.T) {
 			StartPeriod: 300 * time.Second,
 			Retries:     3,
 		},
-		Env: map[string]string{keyEnv: testAPIKey},
+		// No Env: the container runs as shipped, so the probe the engine
+		// runs, and health-probe, read the key Prowlarr wrote to config.xml
+		// on the fresh volume, as in a plain run
 		Mounts: func(tb testing.TB) []harness.Mount {
 			tb.Helper()
 			return []harness.Mount{configVolume(tb, e)}

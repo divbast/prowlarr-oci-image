@@ -349,18 +349,21 @@ breaking change.
   ships in `/app/bin/LICENSE`, where upstream's tarball puts it, and the
   label and the README say nothing more of it
 - **The acceptance suite is Go, on divbast/ci's harness.** Every
-  container it starts runs under `harness.Contract("64m")`, the *exact*
-  confinement the contract claims, `--security-opt no-new-privileges` and
-  `--tmpfs /tmp:size=64m,noexec,nosuid,nodev` included, so a
-  check can never pass under looser settings than we ship. What CI proves
-  is what ships. `TestContract` runs ci's contract suite against the image;
-  the rest are Prowlarr's own, one topic per file: what it serves, a stop, a restart, state kept, the updater, authentication, a URL base, an unwritable `/config`, a startup failure, a migrated `config.xml` and a backup. Each serves through
-  the harness's `Serve` (or `StartServing`, for a container that must be
-  started apart from its first request), which publishes on the host's
-  loopback at ports the engine picks, so no two tests, or two suites on one
-  host, ask for the same one. The assertions (`StatusIs`, `Answers`,
-  `Refuses` and the rest) are the harness's too, shared with every divbast
-  image. Each thing the image serves or guarantees has a test
+  container that runs Prowlarr runs under `harness.Contract("64m")`, the
+  *exact* confinement the contract claims, `--security-opt
+  no-new-privileges` and `--tmpfs /tmp:size=64m,noexec,nosuid,nodev`
+  included, so a check can never pass under looser settings than we ship.
+  What CI proves is what ships. The one exception, `asRoot`, runs only
+  the suite's own probe, to leave a volume as root would. `TestContract`
+  runs ci's contract suite against the image; the rest are Prowlarr's
+  own, one topic per file, as the README's "The pipeline" lists them.
+  Each serves through the harness's `Serve` (or `StartServing`, for a
+  container that must be started apart from its first request), which
+  publishes on the host's loopback at ports the engine picks, so no two
+  tests, or two suites on one host, ask for the same one. The assertions
+  (`StatusIs`, `Answers`, `Refuses` and the rest) are the harness's too,
+  shared with every divbast image. Each thing the image serves or
+  guarantees has a test
 - **Go is modern and idiomatic, and linted strictly**, under ci's
   `go/golangci.yml`. Bash is for what is short and will stay so: the
   justfile's recipes. A check that runs inside a Containerfile build stage
