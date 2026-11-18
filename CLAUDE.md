@@ -10,10 +10,8 @@ Servarr images, and its .NET pattern is the one the Sonarr and Lidarr
 images follow. The divbast organisation's settings, rulesets and Renovate
 wiring live in `divbast/infra`.
 
-It publishes nothing to ghcr.io yet: its publish job still rehearses, with
-`image: ghcr.io/divbast/oci-image-template` and `rehearse: true`, which
-divbast/ci permits only in the template, so each slot's publish job fails
-by design until the publish switch is made.
+It publishes to `ghcr.io/divbast/prowlarr`, tagged with Prowlarr's version
+and `latest`, from `build.yml`'s daily slot and its manual run on `main`.
 
 What makes the image this app's lives here: the Containerfile, the health
 probe (`cmd/divbast-prowlarr`, `internal/probe`), `test/global-json.sh`,
@@ -163,16 +161,13 @@ breaking change.
   once. `.github/workflows/stall.yml`, through divbast/ci's `stall.yml`,
   fails each day that updates have stopped flowing: a Renovate PR stuck, or
   Renovate silent
-- **The publish job rehearses, until the switch.** `build.yml` calls
-  `app-publish.yml` with `image: ghcr.io/divbast/oci-image-template` and
-  `rehearse: true`. divbast/ci refuses a rehearsal outside the template, so
-  the job fails here by design. The switch sets `image` to
-  `ghcr.io/divbast/prowlarr` and removes `rehearse`, publishes once by the
-  button, confirms the package is public, and only then turns `slots` on in
-  `stall.yml`, by removing its `checks` line and adding `published:
-  ghcr.io/divbast/prowlarr:latest`. Then the README's "Running" and
-  "Publishing", this file's opening and this bullet, and the comments above
-  `rehearse` and `checks`, stop saying the image rehearses
+- **The publish job publishes for real.** `build.yml` calls
+  `app-publish.yml` with `image: ghcr.io/divbast/prowlarr` and no
+  `rehearse`, which divbast/ci permits only in the template. It tags the
+  attested index with `PROWLARR_VERSION` and `latest`. `stall.yml` still
+  carries its `checks` line, so slots are off: once the package is public,
+  remove that line and add `published: ghcr.io/divbast/prowlarr:latest`.
+  Until then every slot since the repository was made counts as lost
 - **Every image the Containerfile builds from is verified first.** Before
   `app-check.yml` builds anything, `divbast-verify-images` refuses any image
   not pinned as `<name>:<tag>@sha256:<digest>`, and verifies Docker's

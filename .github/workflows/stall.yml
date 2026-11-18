@@ -28,9 +28,10 @@ jobs:
     name: stall
     uses: divbast/ci/.github/workflows/stall.yml@b9dc17a89b18e738c176b043ead9c8eb7a19a229 # v3.10.0
     with:
-      # No slots: they count the slots that should have published, and this
-      # repository publishes nothing to ghcr.io. An app turns them on once
-      # its first image is public: README.md's "Making a new app", step 8.
+      # No slots yet: they count the slots that should have published, and
+      # until the first public publish every slot since this repository was
+      # made counts as lost. Slots come after that publish: remove this line
+      # and add `published: ghcr.io/divbast/prowlarr:latest`.
       checks: '["open","stuck","renovate"]'
     # Everything stall.yml's job asks for, slots or not: a called job that
     # asks for more than its caller grants fails.

@@ -10,10 +10,8 @@ as a non-root user, with no shell in it. It is built from Prowlarr's
 source, and goes through divbast/ci's shared pipeline: lint, a build for
 amd64 and arm64, the confinement contract and its own acceptance suite
 under Docker and rootless Podman, a vulnerability scan, and a daily
-rehearsed publish.
-
-Its publish job does not publish yet. [Publishing](#publishing) says what
-it does until it is switched on.
+publish to `ghcr.io/divbast/prowlarr`. [Publishing](#publishing) says when
+it publishes and under which tags.
 
 ## Base
 
@@ -61,7 +59,10 @@ of the same major and minor can build it; that file does not ship.
 
 ## Running
 
-There is no published image, so build one first, with Podman to match the
+Pull `ghcr.io/divbast/prowlarr:latest`, which follows Prowlarr's stable
+releases; a version tag, `:<version>` with the Prowlarr release in place
+of `<version>`, pins one. The package page on ghcr.io lists the tags. To
+build it yourself, with Podman to match the
 command below: `docker login dhi.io`, since every image the build starts
 from is Docker Hardened, then `just setup`, then `ENGINE=podman just
 build`, which tags it `localhost/prowlarr:dev`.
@@ -75,7 +76,7 @@ podman run -d --name prowlarr \
   -v prowlarr-config:/config \
   -p 127.0.0.1:8080:8080 \
   --health-cmd '["/usr/local/bin/divbast-prowlarr","health"]' \
-  localhost/prowlarr:dev
+  ghcr.io/divbast/prowlarr:latest
 ```
 
 `--read-only-tmpfs=false` and `--health-cmd` are Podman's alone. Without
@@ -352,13 +353,12 @@ A merge never publishes. The daily slot publishes `main` when `main` moved
 since the commit the published `:latest` was built from, and the button, a
 manual run of `build` from `main`, publishes at once.
 
-This repository does not publish yet. Its publish job still calls
-`app-publish.yml` with `image: ghcr.io/divbast/oci-image-template` and
-`rehearse: true`, as the template does, which rehearses a publish against a
-registry it starts inside the job, so nothing reaches ghcr.io and there is
-no image to pull. divbast/ci rehearses only in `divbast/oci-image-template`,
-so until `build.yml` is switched to `ghcr.io/divbast/prowlarr` without
-`rehearse`, each slot's publish job here fails by design.
+Its publish job calls divbast/ci's `app-publish.yml` with `image:
+ghcr.io/divbast/prowlarr`. A publish pushes an index of the amd64 and arm64
+images, attests it, verifies the attestation, and only then tags it twice:
+with Prowlarr's version, the Containerfile's `PROWLARR_VERSION`, and with
+`latest`. It ends by checking, as an anonymous
+client, that both tags are the attested index.
 
 ## Dependency updates
 
