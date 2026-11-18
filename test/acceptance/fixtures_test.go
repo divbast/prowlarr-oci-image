@@ -216,7 +216,7 @@ type systemStatus struct {
 // logged reads c's log every 250 ms until it holds needle, and returns an
 // error, with the log, once within has passed, or at once if c stops or
 // the engine fails to answer.
-func logged(ctx context.Context, c *harness.Container, needle string, within time.Duration) error {
+func logged(ctx context.Context, c *harness.Container, needle string, within time.Duration) error { //nolint:unparam // each caller's own budget, which harness.ServeWithin and restartWithin each happen to set at a minute today
 	// What each look short of needle, c still running, returns: only
 	// these does Poll look again after, and when it stops on one, the
 	// error needs c's log
