@@ -1,0 +1,78 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 Aryan Ameri <github@aryan.ameri.coffee>
+
+// Command divbast-prowlarr is the image's health check and version.
+//
+// Usage:
+//
+//	divbast-prowlarr health   check Prowlarr answers /ping and is the pinned version
+//	divbast-prowlarr version  print the version
+//
+// health prints nothing when both halves hold, and one "ping: <reason>" or
+// "status: <reason>" line for each that does not.
+//
+// Exit codes:
+//
+//	0  healthy, or the version printed
+//	1  a half of health did not hold
+//	2  the command line is wrong
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"time"
+
+	"github.com/divbast/prowlarr-oci-image/internal/probe"
+)
+
+// version is set at build time, with -ldflags "-X main.version=…".
+var version = "dev"
+
+// within bounds each half of health, so both fit the HEALTHCHECK's 10 s.
+const within = 4 * time.Second
+
+func main() {
+	if len(os.Args) != 2 {
+		usage()
+	}
+	switch os.Args[1] {
+	case "health":
+		os.Exit(health())
+	case "version":
+		fmt.Println("divbast-prowlarr", version)
+	default:
+		usage()
+	}
+}
+
+func usage() {
+	fmt.Fprintln(os.Stderr, "usage: divbast-prowlarr health|version")
+	os.Exit(2)
+}
+
+func health() int {
+	key, err := probe.APIKey(os.Getenv, configXML)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "status:", err)
+		return 1
+	}
+	return probe.Probe(context.Background(), probe.Options{
+		Base:    probe.Base(os.Getenv),
+		APIKey:  key,
+		Version: version,
+		Within:  within,
+	}, os.Stderr)
+}
+
+// configXML opens /config/config.xml, confined to /config.
+func configXML() (io.ReadCloser, error) {
+	root, err := os.OpenRoot("/config")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+	return root.Open("config.xml")
+}

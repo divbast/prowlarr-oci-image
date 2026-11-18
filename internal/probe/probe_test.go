@@ -1,0 +1,234 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 Aryan Ameri <github@aryan.ameri.coffee>
+
+package probe_test
+
+import (
+	"bytes"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/divbast/prowlarr-oci-image/internal/probe"
+)
+
+const key = "0123456789abcdef"
+
+// prowlarr serves what Prowlarr does under prefix: /ping anonymously, and
+// the system status to the right key only. Each field overrides one answer.
+type prowlarr struct {
+	prefix     string
+	pingStatus int
+	appName    string
+	version    string
+}
+
+func (p prowlarr) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	switch r.URL.Path {
+	case p.prefix + "/ping":
+		w.WriteHeader(p.pingStatus)
+		if p.pingStatus == http.StatusOK {
+			_, _ = io.WriteString(w, `{"status":"OK"}`)
+		} else {
+			_, _ = io.WriteString(w, `{"status":"Error"}`)
+		}
+	case p.prefix + "/api/v1/system/status":
+		if r.Header.Get("X-Api-Key") != key {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, `{"appName":"`+p.appName+`","version":"`+p.version+`","isDocker":true}`)
+	default:
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func healthy() prowlarr {
+	return prowlarr{pingStatus: http.StatusOK, appName: "Prowlarr", version: "2.3.0.5236"}
+}
+
+func run(t *testing.T, h http.Handler, o probe.Options) (code int, stderr string) {
+	t.Helper()
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	if o.Base == "" {
+		o.Base = srv.URL
+	}
+	var buf bytes.Buffer
+	code = probe.Probe(t.Context(), o, &buf)
+	return code, buf.String()
+}
+
+func opts() probe.Options {
+	return probe.Options{APIKey: key, Version: "2.3.0.5236", Within: 2 * time.Second}
+}
+
+func TestProbeHealthy(t *testing.T) {
+	t.Parallel()
+	code, stderr := run(t, healthy(), opts())
+	if code != 0 || stderr != "" {
+		t.Fatalf("Probe = %d, %q; want 0 and nothing", code, stderr)
+	}
+}
+
+func TestProbePingFails(t *testing.T) {
+	t.Parallel()
+	h := healthy()
+	h.pingStatus = http.StatusInternalServerError
+	code, stderr := run(t, h, opts())
+	if code != 1 || strings.Count(stderr, "\n") != 1 || !strings.HasPrefix(stderr, "ping: ") {
+		t.Fatalf("Probe = %d, %q; want 1 and one ping: line", code, stderr)
+	}
+}
+
+func TestProbePingWrongBody(t *testing.T) {
+	t.Parallel()
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ping" {
+			_, _ = io.WriteString(w, `{"status":"Error"}`)
+			return
+		}
+		healthy().ServeHTTP(w, r)
+	})
+	code, stderr := run(t, h, opts())
+	if code != 1 || !strings.HasPrefix(stderr, "ping: ") {
+		t.Fatalf("Probe = %d, %q; want 1 and a ping: line", code, stderr)
+	}
+}
+
+func TestProbeStatusWrongApp(t *testing.T) {
+	t.Parallel()
+	h := healthy()
+	h.appName = "Sonarr"
+	code, stderr := run(t, h, opts())
+	if code != 1 || strings.Count(stderr, "\n") != 1 || !strings.HasPrefix(stderr, "status: ") || !strings.Contains(stderr, "Sonarr") {
+		t.Fatalf("Probe = %d, %q; want 1 and one status: line naming Sonarr", code, stderr)
+	}
+}
+
+func TestProbeStatusWrongVersion(t *testing.T) {
+	t.Parallel()
+	h := healthy()
+	h.version = "2.2.0.1"
+	code, stderr := run(t, h, opts())
+	if code != 1 || !strings.HasPrefix(stderr, "status: ") ||
+		!strings.Contains(stderr, "2.2.0.1") || !strings.Contains(stderr, "2.3.0.5236") {
+		t.Fatalf("Probe = %d, %q; want 1 and a status: line naming both versions", code, stderr)
+	}
+}
+
+func TestProbeNeedsKey(t *testing.T) {
+	t.Parallel()
+	o := opts()
+	o.APIKey = "wrong"
+	code, stderr := run(t, healthy(), o)
+	if code != 1 || strings.Count(stderr, "\n") != 1 || !strings.HasPrefix(stderr, "status: ") || !strings.Contains(stderr, "401") {
+		t.Fatalf("Probe = %d, %q; want 1 and one status: line naming 401", code, stderr)
+	}
+}
+
+func TestProbeURLBase(t *testing.T) {
+	t.Parallel()
+	h := healthy()
+	h.prefix = "/prowlarr"
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	base := probe.Base(func(k string) string {
+		switch k {
+		case "PROWLARR__SERVER__URLBASE":
+			return "prowlarr/"
+		case "PROWLARR__SERVER__PORT":
+			return strings.TrimPrefix(srv.URL, "http://127.0.0.1:")
+		}
+		return ""
+	})
+	if want := srv.URL + "/prowlarr"; base != want {
+		t.Fatalf("Base = %q, want %q", base, want)
+	}
+	o := opts()
+	o.Base = base
+	var stderr bytes.Buffer
+	if code := probe.Probe(t.Context(), o, &stderr); code != 0 || stderr.Len() != 0 {
+		t.Fatalf("Probe = %d, %q; want 0 and nothing", code, stderr.String())
+	}
+}
+
+func TestBaseDefaults(t *testing.T) {
+	t.Parallel()
+	got := probe.Base(func(string) string { return "" })
+	if want := "http://127.0.0.1:8080"; got != want {
+		t.Fatalf("Base = %q, want %q", got, want)
+	}
+}
+
+func TestProbeWithin(t *testing.T) {
+	t.Parallel()
+	h := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() })
+	o := opts()
+	o.Within = 50 * time.Millisecond
+	start := time.Now()
+	code, stderr := run(t, h, o)
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("Probe took %v, want under 1s", took)
+	}
+	if code != 1 || !strings.Contains(stderr, "ping: ") || !strings.Contains(stderr, "status: ") {
+		t.Fatalf("Probe = %d, %q; want 1 with both lines", code, stderr)
+	}
+}
+
+type reader struct{ io.Reader }
+
+func (reader) Close() error { return nil }
+
+func TestAPIKey(t *testing.T) {
+	t.Parallel()
+	const xml = `<Config><ApiKey>fromfile</ApiKey><Port>8080</Port></Config>`
+	file := func() (io.ReadCloser, error) { return reader{strings.NewReader(xml)}, nil }
+	missing := func() (io.ReadCloser, error) { return nil, io.ErrUnexpectedEOF }
+	env := func(v string) func(string) string {
+		return func(k string) string {
+			if k == "PROWLARR__AUTH__APIKEY" {
+				return v
+			}
+			return ""
+		}
+	}
+	for _, tc := range []struct {
+		name    string
+		getenv  func(string) string
+		file    func() (io.ReadCloser, error)
+		want    string
+		wantErr []string
+	}{
+		{name: "env wins", getenv: env("fromenv"), file: file, want: "fromenv"},
+		{name: "env needs no file", getenv: env("fromenv"), file: missing, want: "fromenv"},
+		{name: "file alone", getenv: env(""), file: file, want: "fromfile"},
+		{name: "neither", getenv: env(""), file: missing, wantErr: []string{"PROWLARR__AUTH__APIKEY", "config.xml"}},
+		{name: "no key in file", getenv: env(""), file: func() (io.ReadCloser, error) {
+			return reader{strings.NewReader(`<Config></Config>`)}, nil
+		}, wantErr: []string{"PROWLARR__AUTH__APIKEY", "config.xml"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := probe.APIKey(tc.getenv, tc.file)
+			if len(tc.wantErr) == 0 {
+				if err != nil || got != tc.want {
+					t.Fatalf("APIKey = %q, %v; want %q", got, err, tc.want)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("APIKey = %q, nil; want an error", got)
+			}
+			for _, s := range tc.wantErr {
+				if !strings.Contains(err.Error(), s) {
+					t.Errorf("error %q does not name %q", err, s)
+				}
+			}
+		})
+	}
+}
