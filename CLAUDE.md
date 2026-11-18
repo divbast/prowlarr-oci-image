@@ -202,13 +202,15 @@ breaking change.
   holds the runtimeconfigs copied to `/out/bin` to the runtime image's
   tag, which the backend stage reads through a bare `ARG RUNTIME_IMAGE`,
   alone on its line, since Renovate would read anything after it as the
-  runtime pin. Each fails a mismatch with the steps to take, naming
-  [A .NET major](#a-net-major). Each is a build-stage check under "Code
-  quality"'s rules, and its Go test, `test/globaljson` or
-  `test/runtimemajor`, also checks the Containerfile runs it where it
-  must. The two scripts and their tests are oci-image-template's .NET
-  layer's too, byte for byte but for the SPDX line, so a change to one
-  goes to both
+  runtime pin, and declared just above the check, since every later RUN
+  has an ARG's value in its cache key and a new runtime pin would
+  otherwise rebuild the restore and publish. Each fails a mismatch with
+  the steps to take, naming [A .NET major](#a-net-major). Each is a
+  build-stage check under "Code quality"'s rules, and its Go test,
+  `test/globaljson` or `test/runtimemajor`, also checks the Containerfile
+  runs it where it must. The two scripts and their tests are
+  oci-image-template's .NET layer's too, byte for byte but for the SPDX
+  line, so a change to one goes to both
 - **The version is always passed.** `-p:AssemblyVersion=${PROWLARR_VERSION}`
   and `-p:AssemblyConfiguration=master` override upstream's `10.0.0.*`,
   which runs as a development build, with Sentry forced on and the API

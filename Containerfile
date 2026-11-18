@@ -59,12 +59,6 @@ RUN yarn install --frozen-lockfile --network-timeout 120000 \
 FROM dhi.io/dotnet:10.0.404-sdk-debian13@sha256:40c7a4fd82c981f0df98ced709d21cabfd5491324f567c74b3b0d716477873ae AS backend
 ARG PROWLARR_VERSION
 ARG TARGETARCH
-# With no default of its own, RUNTIME_IMAGE takes the one above, which the
-# runtime stage is built FROM, for the check after the copy to /out/bin.
-# It stands alone, with nothing after it on its line: Renovate reads ARG
-# NAME VALUE as NAME=VALUE, so anything there would become the runtime
-# pin it moves.
-ARG RUNTIME_IMAGE
 # Upstream keeps no lock file, and pins every package by an exact version
 # from nuget.org alone, which signs each one: NuGet checks those signatures
 # here.
@@ -74,7 +68,6 @@ SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 WORKDIR /src
 COPY --from=fetch /src ./
 COPY test/global-json.sh /tmp/global-json.sh
-COPY test/runtime-major.sh /tmp/runtime-major.sh
 # The one change made to an upstream file, which never leaves this stage.
 # global.json pins the SDK with no roll-forward policy, which accepts only
 # that feature band, so an SDK of a later band, which Renovate moves this
@@ -130,6 +123,16 @@ RUN rid=$(</tmp/rid); \
     printf '%s\n' "PackageVersion=${PROWLARR_VERSION}" \
         'PackageAuthor=[divbast](https://github.com/divbast/prowlarr-oci-image)' \
         UpdateMethod=Docker Branch=master >/out/package_info
+COPY test/runtime-major.sh /tmp/runtime-major.sh
+# With no default of its own, RUNTIME_IMAGE takes the global one at the
+# top of this file, which the runtime stage is built FROM. It is declared
+# here, for the check alone: BuildKit gives every ARG in scope to each
+# later RUN as its environment, and so to its cache key, and declared any
+# higher it would have a new runtime pin rebuild the restore and publish.
+# It stands alone, with nothing after it on its line: Renovate reads ARG
+# NAME VALUE as NAME=VALUE, so anything there would become the runtime
+# pin it moves.
+ARG RUNTIME_IMAGE
 # An app built for one .NET does not start on another's runtime, and
 # nothing else would say so: the script compares the .NET the shipped
 # runtimeconfigs name with the one leading the runtime image's tag, and
