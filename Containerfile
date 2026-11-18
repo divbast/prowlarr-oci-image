@@ -158,8 +158,9 @@ EXPOSE 8080
 # probe mid-flight and records a bare engine timeout instead of the probe's
 # own line, which is the only diagnostic there is. Podman reads no
 # HEALTHCHECK from an image published as an OCI index: its users pass the
-# same array as --health-cmd. On the machine it was built on, Prowlarr
-# answered /ping within 0.9 s of docker run, migrating a new /config; the
+# same array as --health-cmd. On the machine it was built on, migrating a
+# new /config, Prowlarr answered /ping 0.74 to 1.46 s after the run in 49
+# of 50 runs on Docker and Podman, and 3.5 s after it in the other. The
 # start period leaves room for a slower host and for an upgrade's
 # migrations on a large database.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
@@ -167,5 +168,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 USER 65532:65532
 # Prowlarr itself runs as PID 1, with nothing before it. .NET handles
 # SIGTERM there and reaps its child processes, so it needs no init. The
-# apphost finds the runtime through the base's DOTNET_ROOT.
-ENTRYPOINT ["/app/bin/Prowlarr", "-nobrowser", "-data=/config"]
+# apphost finds the runtime through the base's DOTNET_ROOT. -exitimmediately
+# is upstream's own flag, read in one place: a startup failure upstream
+# calls non-recoverable, such as a PID file it cannot write, then exits 3
+# at once, where without it Prowlarr would wait an hour for a key that no
+# one can press in a container, and the container would sit there looking
+# alive.
+ENTRYPOINT ["/app/bin/Prowlarr", "-nobrowser", "-exitimmediately", "-data=/config"]

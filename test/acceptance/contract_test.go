@@ -36,7 +36,7 @@ const binary = "/usr/local/bin/divbast-prowlarr"
 
 // serverArgv is PID 1's argv: the image's ENTRYPOINT, since nothing runs
 // before Prowlarr.
-var serverArgv = []string{"/app/bin/Prowlarr", "-nobrowser", "-data=/config"}
+var serverArgv = []string{"/app/bin/Prowlarr", "-nobrowser", "-exitimmediately", "-data=/config"}
 
 // healthCmd is the shipped health probe, as the image's HEALTHCHECK runs
 // it and a Podman user passes it with --health-cmd.

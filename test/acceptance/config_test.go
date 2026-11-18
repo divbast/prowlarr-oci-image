@@ -24,11 +24,36 @@ const deniedConfig = "Access to the path '/config"
 func TestRefusesUnwritableConfig(t *testing.T) {
 	t.Parallel()
 	e, image := underTest(t)
-	ctx := t.Context()
 	vol := configVolume(t, e)
 	prepare(t, e, image, asRoot, vol, "root-own")
-	checks := harness.NewChecks(t)
+	stopsFailing(t, e, image, vol, "its log says it may not write in /config", deniedConfig)
+}
 
+// pidUnwritable is what Prowlarr says when it cannot write its PID file.
+const pidUnwritable = "Prowlarr failed to start: Unable to write PID file /config/prowlarr.pid"
+
+// TestExitsOnStartupFailure runs the image on a /config it can write, in
+// which its PID file, prowlarr.pid, is a directory. Prowlarr cannot write
+// the file, and fails to start with a ProwlarrStartupException, which
+// upstream calls non-recoverable: unless given -exitimmediately, it then
+// waits an hour for a key that no one presses in a container. The
+// container must stop within a minute, with a status that is not 0, and
+// its log must say why.
+func TestExitsOnStartupFailure(t *testing.T) {
+	t.Parallel()
+	e, image := underTest(t)
+	vol := configVolume(t, e)
+	prepare(t, e, image, harness.Contract(tmpfsSize), vol, "mkdir", "prowlarr.pid")
+	stopsFailing(t, e, image, vol, "its log says it could not write its PID file", pidUnwritable)
+}
+
+// stopsFailing runs the image under the contract, with vol at /config and
+// no network, and checks that the container stops within a minute, with a
+// status that is not 0, and that its log holds needle, as the check what.
+func stopsFailing(t *testing.T, e harness.Engine, image string, vol harness.Mount, what, needle string) {
+	t.Helper()
+	ctx := t.Context()
+	checks := harness.NewChecks(t)
 	c, err := e.Start(ctx, t, &harness.RunSpec{
 		Image:   image,
 		Network: "none",
@@ -46,7 +71,7 @@ func TestRefusesUnwritableConfig(t *testing.T) {
 	}
 	checks.True("the container stops within "+harness.ServeWithin.String()+", with a status that is not 0",
 		code != 0, fmt.Sprintf("exit status %d", code))
-	harness.LogContains(t, c, "its log says it may not write in /config", deniedConfig)
+	harness.LogContains(t, c, what, needle)
 }
 
 // migratedConfig is a config.xml as another Prowlarr image leaves it in

@@ -13,6 +13,7 @@
 //
 //	probe root-own                make /config root's, mode 0755, holding a file of root's
 //	probe write <name> <content>  write content to /config/<name>, as the container's user
+//	probe mkdir <name>            make the directory /config/<name>, as the container's user
 //
 // It prints nothing and exits 0 once it has done what it was asked. It
 // prints why on stderr and exits 1 when it could not, and exits 2 for a
@@ -41,8 +42,10 @@ func run(args []string, stderr io.Writer) int {
 		err = rootOwn()
 	case len(args) == 3 && args[0] == "write":
 		err = write(args[1], args[2])
+	case len(args) == 2 && args[0] == "mkdir":
+		err = mkdir(args[1])
 	default:
-		_, _ = fmt.Fprintln(stderr, "usage: probe root-own | probe write <name> <content>")
+		_, _ = fmt.Fprintln(stderr, "usage: probe root-own | probe write <name> <content> | probe mkdir <name>")
 		return 2
 	}
 	if err != nil {
@@ -64,6 +67,16 @@ func write(name, content string) error {
 	}
 	defer func() { _ = root.Close() }()
 	return root.WriteFile(name, []byte(content), 0o600)
+}
+
+// mkdir makes the directory name in dir, which name cannot leave.
+func mkdir(name string) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	return root.Mkdir(name, 0o700)
 }
 
 // keepName is the file root-own leaves in the directory. Docker copies
