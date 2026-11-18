@@ -125,8 +125,9 @@ ARG PROWLARR_VERSION
 COPY --from=backend /out/bin /app/bin
 COPY --from=frontend /src/_output/UI /app/bin/UI
 COPY --from=backend /out/package_info /app/package_info
-# Prowlarr's licence, beside the app it covers, as upstream's packages ship it
-COPY --from=fetch /src/LICENSE /app/LICENSE
+# Prowlarr's licence, where upstream's release tarball puts it: build.sh
+# copies it into the tarball's Prowlarr/ folder, which is this /app/bin
+COPY --from=fetch /src/LICENSE /app/bin/LICENSE
 COPY --from=probe /out/divbast-prowlarr /usr/local/bin/divbast-prowlarr
 # The data directory, empty and uid 65532's, and not a VOLUME: a new named
 # volume mounted here takes its owner from it, so Prowlarr can write to it.
@@ -164,6 +165,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD ["/usr/local/bin/divbast-prowlarr", "health"]
 USER 65532:65532
-# Prowlarr itself, as PID 1, which .NET handles SIGTERM and reaps children
-# as. The apphost finds the runtime through the base's DOTNET_ROOT.
+# Prowlarr itself runs as PID 1, with nothing before it. .NET handles
+# SIGTERM there and reaps its child processes, so it needs no init. The
+# apphost finds the runtime through the base's DOTNET_ROOT.
 ENTRYPOINT ["/app/bin/Prowlarr", "-nobrowser", "-data=/config"]
