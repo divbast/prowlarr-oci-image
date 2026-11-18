@@ -131,7 +131,8 @@ func Base(getenv func(string) string, configXML func() (io.ReadCloser, error)) s
 }
 
 // APIKey is PROWLARR__AUTH__APIKEY if set, else the ApiKey in config.xml,
-// which configXML opens. Neither is an error naming both.
+// which configXML opens, trimmed of white space as Prowlarr trims it.
+// Neither is an error naming both.
 func APIKey(getenv func(string) string, configXML func() (io.ReadCloser, error)) (string, error) {
 	if k := getenv("PROWLARR__AUTH__APIKEY"); k != "" {
 		return k, nil
@@ -140,10 +141,13 @@ func APIKey(getenv func(string) string, configXML func() (io.ReadCloser, error))
 	if err != nil {
 		return "", fmt.Errorf("no API key: PROWLARR__AUTH__APIKEY is unset and %w", err)
 	}
-	if c.APIKey == "" {
+	// Prowlarr trims a config.xml value's white space as it reads it, and
+	// compares the key it is sent with what is left
+	k := strings.TrimSpace(c.APIKey)
+	if k == "" {
 		return "", errors.New("no API key: PROWLARR__AUTH__APIKEY is unset and config.xml has no ApiKey")
 	}
-	return c.APIKey, nil
+	return k, nil
 }
 
 // fileConfig is what the probe reads from config.xml.

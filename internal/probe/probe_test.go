@@ -259,6 +259,8 @@ func TestAPIKey(t *testing.T) {
 		{name: "env wins", getenv: env("fromenv"), file: keyFile, want: "fromenv"},
 		{name: "env needs no file", getenv: env("fromenv"), file: missing, want: "fromenv"},
 		{name: "file alone", getenv: env(""), file: keyFile, want: "fromfile"},
+		{name: "file with white space around the key, as Prowlarr trims it", getenv: env(""), file: file("<Config><ApiKey>\n  fromfile \t</ApiKey></Config>"), want: "fromfile"},
+		{name: "file with white space alone is no key", getenv: env(""), file: file("<Config><ApiKey> \n </ApiKey></Config>"), wantErr: []string{"PROWLARR__AUTH__APIKEY", "config.xml"}},
 		{name: "neither", getenv: env(""), file: missing, wantErr: []string{"PROWLARR__AUTH__APIKEY", "config.xml"}},
 		{name: "no key in file", getenv: env(""), file: func() (io.ReadCloser, error) {
 			return reader{strings.NewReader(`<Config></Config>`)}, nil
