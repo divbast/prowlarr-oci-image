@@ -70,17 +70,11 @@ COPY --from=fetch /src ./
 # The one change made to an upstream file, which never leaves this stage.
 # global.json pins the SDK with no roll-forward policy, which accepts only
 # that feature band, so an SDK of a later band, which Renovate moves this
-# stage's image to, would refuse to build. Upstream's version stays the
-# floor, and any later band of the same major and minor is accepted.
-RUN json=$(<global.json); \
-    re='"sdk"[[:space:]]*:[[:space:]]*[{][^}]*"version"[[:space:]]*:[[:space:]]*"([0-9]+[.][0-9]+[.][0-9]+[^"]*)"'; \
-    if [[ ! "${json}" =~ ${re} ]]; then \
-        echo "global.json has no sdk.version to keep as the floor:" >&2; \
-        printf '%s\n' "${json}" >&2; \
-        exit 1; \
-    fi; \
-    printf '{"sdk":{"version":"%s","rollForward":"latestFeature"}}\n' "${BASH_REMATCH[1]}" >global.json; \
-    cat global.json
+# stage's image to, would refuse to build. The script keeps upstream's
+# version as the floor and accepts any later band of the same major and
+# minor, and refuses a global.json it cannot read a version from.
+COPY test/global-json.sh /tmp/global-json.sh
+RUN /tmp/global-json.sh global.json
 # The properties restore and publish share, one per line, in a response
 # file both read. The version is passed rather than left at upstream's
 # 10.0.0.*, which runs as a development build; -p: overrides it, and the
