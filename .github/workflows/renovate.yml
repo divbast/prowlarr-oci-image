@@ -41,7 +41,7 @@ permissions: {}
 jobs:
   renovate:
     name: renovate
-    uses: divbast/ci/.github/workflows/renovate.yml@e85084667fec3d56b4d75905559f07c03db658a2 # harness/zstd-layers (ci#57)
+    uses: divbast/ci/.github/workflows/renovate.yml@4541e14a39c08bd8d213df022556ef4b8fb0c24c # harness/zstd-layers (ci#57)
     with:
       automerge: ${{ vars.PROWLARR_AUTOMERGE == 'enabled' }}
       dhi-username: ${{ vars.DHI_USERNAME }}
