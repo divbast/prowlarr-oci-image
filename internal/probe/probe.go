@@ -89,7 +89,7 @@ func get(ctx context.Context, o Options, path, apiKey string, check func(body []
 	if apiKey != "" {
 		req.Header.Set("X-Api-Key", apiKey)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := noRedirects.Do(req)
 	if err != nil {
 		return err
 	}
@@ -140,4 +140,11 @@ func APIKey(getenv func(string) string, configXML func() (io.ReadCloser, error))
 		return "", errors.New("no API key: PROWLARR__AUTH__APIKEY is unset and config.xml has no ApiKey")
 	}
 	return c.APIKey, nil
+}
+
+// noRedirects reports a redirect as its status instead of following it:
+// Prowlarr redirects a request that lacks its URL base, which is the
+// misconfiguration the probe exists to show.
+var noRedirects = &http.Client{
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 }

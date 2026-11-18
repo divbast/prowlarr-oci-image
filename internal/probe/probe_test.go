@@ -232,3 +232,24 @@ func TestAPIKey(t *testing.T) {
 		})
 	}
 }
+
+// TestProbeRefusesRedirect has Prowlarr serve under /prowlarr only, and
+// redirect every other path there with a 307, as UrlBaseMiddleware does.
+// A probe whose Base lacks the URL base must say so, not follow it.
+func TestProbeRefusesRedirect(t *testing.T) {
+	t.Parallel()
+	h := healthy()
+	h.prefix = "/prowlarr"
+	inner := http.NewServeMux()
+	inner.Handle("/prowlarr/", h)
+	inner.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/prowlarr"+r.URL.Path)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	})
+	code, stderr := run(t, inner, opts())
+	if code != 1 || strings.Count(stderr, "\n") != 2 ||
+		!strings.Contains(stderr, "ping: ") || !strings.Contains(stderr, "status: ") ||
+		strings.Count(stderr, "307") != 2 {
+		t.Fatalf("Probe = %d, %q; want 1 with a ping: and a status: line naming 307", code, stderr)
+	}
+}
