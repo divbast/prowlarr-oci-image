@@ -19,6 +19,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -54,25 +55,39 @@ func usage() {
 }
 
 func health() int {
+	configXML := readConfigXML()
 	key, err := probe.APIKey(os.Getenv, configXML)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "status:", err)
 		return 1
 	}
 	return probe.Probe(context.Background(), probe.Options{
-		Base:    probe.Base(os.Getenv),
+		Base:    probe.Base(os.Getenv, configXML),
 		APIKey:  key,
 		Version: version,
 		Within:  within,
 	}, os.Stderr)
 }
 
-// configXML opens /config/config.xml, confined to /config.
-func configXML() (io.ReadCloser, error) {
+// readConfigXML reads /config/config.xml, confined to /config, once, and
+// returns what opens what it read, or gives why it could not, each time it
+// is called: the API key and the URL base both come from that one read.
+func readConfigXML() func() (io.ReadCloser, error) {
+	b, err := readFile()
+	return func() (io.ReadCloser, error) {
+		if err != nil {
+			return nil, err
+		}
+		return io.NopCloser(bytes.NewReader(b)), nil
+	}
+}
+
+// readFile reads /config/config.xml, confined to /config.
+func readFile() ([]byte, error) {
 	root, err := os.OpenRoot("/config")
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = root.Close() }()
-	return root.Open("config.xml")
+	return root.ReadFile("config.xml")
 }

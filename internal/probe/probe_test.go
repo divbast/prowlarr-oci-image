@@ -145,7 +145,7 @@ func TestProbeURLBase(t *testing.T) {
 			return strings.TrimPrefix(srv.URL, "http://127.0.0.1:")
 		}
 		return ""
-	})
+	}, missing)
 	if want := srv.URL + "/prowlarr"; base != want {
 		t.Fatalf("Base = %q, want %q", base, want)
 	}
@@ -159,11 +159,65 @@ func TestProbeURLBase(t *testing.T) {
 
 func TestBaseDefaults(t *testing.T) {
 	t.Parallel()
-	got := probe.Base(func(string) string { return "" })
+	got := probe.Base(func(string) string { return "" }, missing)
 	if want := "http://127.0.0.1:8080"; got != want {
 		t.Fatalf("Base = %q, want %q", got, want)
 	}
 }
+
+// TestBaseURLBase checks where the URL base comes from, as Prowlarr takes
+// it: PROWLARR__SERVER__URLBASE when it is set, else config.xml's
+// UrlBase, which the UI's Settings writes; and that either is given a
+// leading / and no trailing /, and means nothing once those are trimmed.
+func TestBaseURLBase(t *testing.T) {
+	t.Parallel()
+	const root = "http://127.0.0.1:8080"
+	env := func(v string) func(string) string {
+		return func(k string) string {
+			if k == "PROWLARR__SERVER__URLBASE" {
+				return v
+			}
+			return ""
+		}
+	}
+	for _, tc := range []struct {
+		name   string
+		getenv func(string) string
+		file   func() (io.ReadCloser, error)
+		want   string
+	}{
+		{name: "env wins over config.xml", getenv: env("/prowlarr"), file: urlBaseFile("/other"), want: root + "/prowlarr"},
+		{name: "env needs no file", getenv: env("/prowlarr"), file: missing, want: root + "/prowlarr"},
+		{name: "config.xml alone", getenv: env(""), file: urlBaseFile("/prowlarr"), want: root + "/prowlarr"},
+		{name: "config.xml without a leading slash, with a trailing one", getenv: env(""), file: urlBaseFile("prowlarr/"), want: root + "/prowlarr"},
+		{name: "config.xml with white space, as Prowlarr trims it", getenv: env(""), file: urlBaseFile(" /prowlarr/ "), want: root + "/prowlarr"},
+		{name: "config.xml's / is none", getenv: env(""), file: urlBaseFile("/"), want: root},
+		{name: "config.xml's empty UrlBase is none", getenv: env(""), file: urlBaseFile(""), want: root},
+		{name: "config.xml with no UrlBase is none", getenv: env(""), file: file(`<Config><ApiKey>k</ApiKey></Config>`), want: root},
+		{name: "an invalid config.xml is none", getenv: env(""), file: file(`<Config><UrlBase>`), want: root},
+		{name: "neither is none", getenv: env(""), file: missing, want: root},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := probe.Base(tc.getenv, tc.file); got != tc.want {
+				t.Fatalf("Base = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// file opens a config.xml holding xml.
+func file(xml string) func() (io.ReadCloser, error) {
+	return func() (io.ReadCloser, error) { return reader{strings.NewReader(xml)}, nil }
+}
+
+// urlBaseFile opens a config.xml whose UrlBase is v.
+func urlBaseFile(v string) func() (io.ReadCloser, error) {
+	return file("<Config><Port>8080</Port><UrlBase>" + v + "</UrlBase></Config>")
+}
+
+// missing is a config.xml that cannot be opened.
+func missing() (io.ReadCloser, error) { return nil, io.ErrUnexpectedEOF }
 
 func TestProbeWithin(t *testing.T) {
 	t.Parallel()
@@ -186,9 +240,7 @@ func (reader) Close() error { return nil }
 
 func TestAPIKey(t *testing.T) {
 	t.Parallel()
-	const xml = `<Config><ApiKey>fromfile</ApiKey><Port>8080</Port></Config>`
-	file := func() (io.ReadCloser, error) { return reader{strings.NewReader(xml)}, nil }
-	missing := func() (io.ReadCloser, error) { return nil, io.ErrUnexpectedEOF }
+	keyFile := file(`<Config><ApiKey>fromfile</ApiKey><Port>8080</Port></Config>`)
 	env := func(v string) func(string) string {
 		return func(k string) string {
 			if k == "PROWLARR__AUTH__APIKEY" {
@@ -204,9 +256,9 @@ func TestAPIKey(t *testing.T) {
 		want    string
 		wantErr []string
 	}{
-		{name: "env wins", getenv: env("fromenv"), file: file, want: "fromenv"},
+		{name: "env wins", getenv: env("fromenv"), file: keyFile, want: "fromenv"},
 		{name: "env needs no file", getenv: env("fromenv"), file: missing, want: "fromenv"},
-		{name: "file alone", getenv: env(""), file: file, want: "fromfile"},
+		{name: "file alone", getenv: env(""), file: keyFile, want: "fromfile"},
 		{name: "neither", getenv: env(""), file: missing, wantErr: []string{"PROWLARR__AUTH__APIKEY", "config.xml"}},
 		{name: "no key in file", getenv: env(""), file: func() (io.ReadCloser, error) {
 			return reader{strings.NewReader(`<Config></Config>`)}, nil

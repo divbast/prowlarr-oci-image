@@ -105,15 +105,26 @@ func get(ctx context.Context, o Options, path, apiKey string, check func(body []
 }
 
 // Base is where Prowlarr listens, as the probe reaches it: loopback on
-// PROWLARR__SERVER__PORT (8080 if unset), then PROWLARR__SERVER__URLBASE
-// with a leading / and no trailing /, or nothing.
-func Base(getenv func(string) string) string {
+// PROWLARR__SERVER__PORT (8080 if unset), then the URL base with a leading
+// / and no trailing /, or nothing. The URL base is
+// PROWLARR__SERVER__URLBASE if set, else the UrlBase in config.xml, which
+// configXML opens and the UI's Settings write, as Prowlarr takes it. A
+// config.xml that cannot be read gives none, so a setup that sets
+// everything in the environment needs no config.xml.
+func Base(getenv func(string) string, configXML func() (io.ReadCloser, error)) string {
 	port := getenv("PROWLARR__SERVER__PORT")
 	if port == "" {
 		port = "8080"
 	}
+	u := getenv("PROWLARR__SERVER__URLBASE")
+	if u == "" {
+		// Prowlarr trims a config.xml value's white space as it reads it
+		if c, err := readConfig(configXML); err == nil {
+			u = strings.TrimSpace(c.URLBase)
+		}
+	}
 	base := ""
-	if u := strings.Trim(getenv("PROWLARR__SERVER__URLBASE"), "/"); u != "" {
+	if u = strings.Trim(u, "/"); u != "" {
 		base = "/" + u
 	}
 	return "http://127.0.0.1:" + port + base
@@ -125,21 +136,35 @@ func APIKey(getenv func(string) string, configXML func() (io.ReadCloser, error))
 	if k := getenv("PROWLARR__AUTH__APIKEY"); k != "" {
 		return k, nil
 	}
-	r, err := configXML()
+	c, err := readConfig(configXML)
 	if err != nil {
-		return "", fmt.Errorf("no API key: PROWLARR__AUTH__APIKEY is unset and config.xml is unreadable: %w", err)
-	}
-	defer func() { _ = r.Close() }()
-	var c struct {
-		APIKey string `xml:"ApiKey"`
-	}
-	if err := xml.NewDecoder(r).Decode(&c); err != nil {
-		return "", fmt.Errorf("no API key: PROWLARR__AUTH__APIKEY is unset and config.xml is invalid: %w", err)
+		return "", fmt.Errorf("no API key: PROWLARR__AUTH__APIKEY is unset and %w", err)
 	}
 	if c.APIKey == "" {
 		return "", errors.New("no API key: PROWLARR__AUTH__APIKEY is unset and config.xml has no ApiKey")
 	}
 	return c.APIKey, nil
+}
+
+// fileConfig is what the probe reads from config.xml.
+type fileConfig struct {
+	APIKey  string `xml:"ApiKey"`
+	URLBase string `xml:"UrlBase"`
+}
+
+// readConfig decodes the config.xml configXML opens, or says why it could
+// not.
+func readConfig(configXML func() (io.ReadCloser, error)) (fileConfig, error) {
+	var c fileConfig
+	r, err := configXML()
+	if err != nil {
+		return c, fmt.Errorf("config.xml is unreadable: %w", err)
+	}
+	defer func() { _ = r.Close() }()
+	if err := xml.NewDecoder(r).Decode(&c); err != nil {
+		return c, fmt.Errorf("config.xml is invalid: %w", err)
+	}
+	return c, nil
 }
 
 // noRedirects reports a redirect as its status instead of following it:
