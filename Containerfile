@@ -109,10 +109,22 @@ RUN --network=none dotnet msbuild src/Prowlarr.sln -t:PublishAllRids @/tmp/build
 # /app/bin as upstream's Linux package lays it out, without the Windows and
 # service helpers, and without Prowlarr.Update, the in-app updater the
 # image never runs: package_info names Docker as the update mechanism, and
-# upstream reads it only from beside a directory named bin.
+# upstream reads it only from beside a directory named bin. Publish writes
+# the app under its target framework, _output/net10.0 today, which a .NET
+# major moves, so the folder is found rather than named, and must be the
+# only one: none means publish wrote it somewhere else, and with several
+# nothing says which is the app. nullglob, for the find alone, makes no
+# match an empty list rather than the pattern itself.
 RUN rid=$(</tmp/rid); \
+    shopt -s nullglob; \
+    published=(_output/net*/"${rid}"/publish); \
+    shopt -u nullglob; \
+    if ((${#published[@]} != 1)); then \
+        echo "ERROR: ${#published[@]} folders match _output/net*/${rid}/publish, where publish writes the app to one: ${published[*]:-none}." >&2; \
+        exit 1; \
+    fi; \
     mkdir -p /out/config; \
-    cp -a "_output/net10.0/${rid}/publish" /out/bin; \
+    cp -a "${published[0]}" /out/bin; \
     rm /out/bin/Prowlarr.Windows.* /out/bin/ServiceInstall* /out/bin/ServiceUninstall*; \
     test ! -e /out/bin/Prowlarr.Update; \
     printf '%s\n' "PackageVersion=${PROWLARR_VERSION}" \

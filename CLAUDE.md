@@ -256,7 +256,10 @@ Each step needs the user's go-ahead:
    fails it with `ERROR: … A .NET major waits until … retargets …`, which
    here is expected, and no reason to stop.
 3. On a branch from main, take both Renovate commits with
-   `git cherry-pick -S`, open a PR, and merge it when green.
+   `git cherry-pick -S`, open a PR, and merge it when green. Nothing the
+   Containerfile runs names the target framework, so those two commits are
+   the whole change: the backend stage finds the one folder matching
+   `_output/net*/<rid>/publish`, and refuses none or several.
 4. Close the two Renovate PRs.
 
 ## Where the shared parts live
