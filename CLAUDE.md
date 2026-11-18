@@ -159,15 +159,14 @@ breaking change.
   publishes.** `build.yml`'s daily run is the publishing slot, through
   divbast/ci's `app-publish.yml`, and a manual run of `build` publishes at
   once. `.github/workflows/stall.yml`, through divbast/ci's `stall.yml`,
-  fails each day that updates have stopped flowing: a Renovate PR stuck, or
-  Renovate silent
+  fails each day that updates have stopped flowing: a Renovate PR stuck,
+  Renovate silent, or a daily slot that should have published and did not
 - **The publish job publishes for real.** `build.yml` calls
   `app-publish.yml` with `image: ghcr.io/divbast/prowlarr` and no
-  `rehearse`, which divbast/ci permits only in the template. It tags the
-  attested index with `PROWLARR_VERSION` and `latest`. `stall.yml` still
-  carries its `checks` line, so slots are off: once the package is public,
-  remove that line and add `published: ghcr.io/divbast/prowlarr:latest`.
-  Until then every slot since the repository was made counts as lost
+  `rehearse`, an input divbast/ci permits only in the template. It tags the
+  attested index with `PROWLARR_VERSION` and `latest`. `stall.yml` passes
+  `published: ghcr.io/divbast/prowlarr:latest`, so its slots check is on:
+  it counts the daily slots that should have published and did not
 - **Every image the Containerfile builds from is verified first.** Before
   `app-check.yml` builds anything, `divbast-verify-images` refuses any image
   not pinned as `<name>:<tag>@sha256:<digest>`, and verifies Docker's
