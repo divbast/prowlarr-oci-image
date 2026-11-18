@@ -307,6 +307,14 @@ breaking change.
 - **`just scan` needs `skopeo` on `PATH`.** It reads the published image with
   [skopeo](https://github.com/containers/skopeo), which no `mise.toml` entry
   provides, so `just ci` needs it too. CI runners already have it
+- **The acceptance suite under Docker needs `zstd` on `PATH`.** Every
+  layer of a DHI image is zstd, and ci's harness reads the layers of the
+  image Docker saves through the `zstd` command, since Go's standard
+  library has no zstd reader yet; without it the contract's
+  `no-file-capability-xattr` check fails, naming the layer. No
+  `mise.toml` entry provides it. GitHub's runners have it, and a Mac gets
+  it from Homebrew (`brew install zstd`). Podman saves its layers
+  uncompressed, so a Podman run does not need it
 - **`renovate.json` has a `.license` sidecar.** JSON has no comment syntax,
   and an SPDX tag written as a string value carries the closing quote into
   the expression, which `reuse` rejects

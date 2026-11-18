@@ -371,7 +371,11 @@ and this repository's rulesets are all managed from
   [skopeo](https://github.com/containers/skopeo), which must be on `PATH`;
   so must it for `just ci`. CI runners already have it.
 - `just test` builds, then runs the acceptance suite against the image,
-  under `ENGINE`, docker unless it says podman.
+  under `ENGINE`, docker unless it says podman. Under Docker it needs
+  `zstd` on `PATH`, since every layer of a Docker Hardened Image is zstd
+  and the suite reads the image's layers through it; no `mise.toml` entry
+  provides it. CI runners already have it, and a Mac gets it with `brew
+  install zstd`.
 - `just lint` runs every lint gate, and needs a running Docker daemon, for
   `docker build --check`.
 - `just ci` runs every gate, the scan included. Run it before committing.
