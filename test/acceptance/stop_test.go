@@ -12,18 +12,22 @@ import (
 )
 
 // stopWithin is how long a stop may take: the slowest stop measured, plus
-// half again. Once its host had started, Prowlarr stopped in 0.16 to
-// 0.22 s on its own, 0.18 to 0.48 s within this suite, and 0.42 to 2.7 s
-// with three suites running at once on one host, as on a busy CI runner.
-// 2.7 s and half again rounds up to 4.1 s, well inside the 10 s after
-// which an engine kills a PID 1 that has not stopped.
-const stopWithin = 4100 * time.Millisecond
+// half again, with the definitions download refused and analytics off,
+// as serveProwlarr runs every container. Once its host had started,
+// Prowlarr stopped in 0.16 to 0.23 s on its own, 0.40 to 1.10 s within
+// this suite, and 0.60 to 2.81 s with three suites running at once on one
+// host, as on a busy CI runner. 2.81 s and half again rounds up to 4.3 s,
+// well inside the 10 s after which an engine kills a PID 1 that has not
+// stopped.
+const stopWithin = 4300 * time.Millisecond
 
 // hostStarted is what .NET logs once Prowlarr's host has finished
-// starting. Prowlarr answers /ping before that, while it still fetches
-// its indexer definitions from indexers.prowlarr.com, and a stop then
-// waits for the fetch: from 0.5 to 5.8 s on one host, as the network
-// allowed, which says nothing of how Prowlarr stops.
+// starting. Prowlarr answers /ping just before that, while its host runs
+// what it runs on starting, and a stop in that window waits for it to
+// finish. With the definitions download refused that is 0.1 s; when the
+// download went ahead, it was 0.5 to 5.8 s, as the network allowed.
+// Waiting for this line keeps the stop measured a stop alone, whatever
+// starting comes to run.
 const hostStarted = "Application started."
 
 // TestStopsPromptly stops a serving container as a user does, with

@@ -26,8 +26,9 @@ const restartWithin = time.Minute
 // inside the one process, which, as PID 1, must not exit: the container
 // stops with it, and no engine starts it again unless told to. So the
 // container must still be running, its PID 1 the process the engine
-// started, with the same argv, and /ping must answer 200 again, after
-// Prowlarr has said it is restarting, within a minute.
+// started, with the same argv, /ping must answer 200 again, after
+// Prowlarr has said it is restarting, within a minute, and the probe must
+// find it healthy.
 func TestRestartsInProcess(t *testing.T) {
 	t.Parallel()
 	e, image := underTest(t)
@@ -45,6 +46,7 @@ func TestRestartsInProcess(t *testing.T) {
 	harness.Answers(t, "POST /api/v1/system/restart answers 200", http.StatusOK, resp, err)
 	err = servesAgain(ctx, s)
 	checks.True("Prowlarr says it is restarting, and /ping answers 200 again within "+restartWithin.String(), err == nil, errText(err))
+	healthy(t, s, "after the restart, the probe exits 0 and prints nothing")
 
 	after, err := s.C.Inspect(ctx)
 	if err != nil {

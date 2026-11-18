@@ -59,11 +59,32 @@ func keyed(env map[string]string) map[string]string {
 	return keyed
 }
 
+// definitionsHost is where Prowlarr downloads its indexer definitions
+// from each time its host starts, 4.8 MB of them. Every container served
+// here finds it at 127.0.0.1, which refuses the connection at once: no
+// test needs the definitions, none should wait on a download, and a suite
+// should not fetch them a dozen times over.
+const definitionsHost = "indexers.prowlarr.com"
+
+// analyticsOff turns off what Prowlarr sends upstream, its error reports
+// among them. With the definitions refused, each container logs an error,
+// which it would report to Servarr's Sentry, and wait 2 s for that report
+// to go as it exits. The image ships with analytics on, as upstream does:
+// the contract's own container runs that way.
+const analyticsOff = "PROWLARR__LOG__ANALYTICSENABLED"
+
 // serveProwlarr serves the image under the contract, with env and mounts,
 // and waits until readyPath answers. Prowlarr listens only once its
-// database is migrated, so an answer at its ping route means it is up.
+// database is migrated, so an answer at its ping route means it is up. The
+// container is not let fetch the indexer definitions, and sends nothing
+// upstream.
 func serveProwlarr(t *testing.T, e harness.Engine, image, readyPath string, env map[string]string, mounts ...harness.Mount) *harness.Serving {
 	t.Helper()
+	env = maps.Clone(env)
+	if env == nil {
+		env = map[string]string{}
+	}
+	env[analyticsOff] = "False"
 	s, err := e.Serve(t.Context(), t, &harness.ServeSpec{
 		Run: harness.RunSpec{
 			Image:     image,
@@ -71,6 +92,7 @@ func serveProwlarr(t *testing.T, e harness.Engine, image, readyPath string, env 
 			Env:       env,
 			Mounts:    mounts,
 			HealthCmd: healthCmd,
+			Extra:     []string{"--add-host", definitionsHost + ":127.0.0.1"},
 		},
 		AppPort:   appPort,
 		ReadyPath: readyPath,
@@ -176,6 +198,12 @@ func prepare(t *testing.T, e harness.Engine, image string, confine harness.Confi
 type tag struct {
 	ID    int    `json:"id,omitempty"`
 	Label string `json:"label"`
+}
+
+// hostConfig is the part of GET /api/v1/config/host the tests read: what
+// config.xml says now.
+type hostConfig struct {
+	UpdateMechanism string `json:"updateMechanism"`
 }
 
 // systemStatus is the part of GET /api/v1/system/status the tests read.
