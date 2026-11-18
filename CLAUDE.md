@@ -327,8 +327,8 @@ breaking change.
 - All linter gates are enforced as errors — fix them, don't suppress them. Any
   suppression, anywhere, needs an explicit, comment-level justification beside
   it to be accepted
-- **The scan blocks only what a change would add, and is advisory while
-  nothing is published.** `divbast-scan` scans the candidate and the
+- **The scan blocks only what a change would add, and never passes a
+  report blind to the OS.** `divbast-scan` scans the candidate and the
   published `:latest` for the same arch from one Trivy database, and fails
   only on a HIGH or CRITICAL finding, the same vulnerability in the same
   package, that the published image lacks. No release can make an
@@ -343,7 +343,15 @@ breaking change.
   public image the registry refuses, a registry that cannot be reached, or
   GitHub not answering fails the scan rather than waving it through. A
   local `just scan` never asks GitHub, so a refusal there is advisory,
-  with a warning that only CI can tell what it means
+  with a warning that only CI can tell what it means. **None of that
+  softens the OS guard:** a report in which Trivy recognised no operating
+  system, or saw no OS package, fails the scan, for the candidate and the
+  published image alike and whether or not anything is published, since
+  it would show nothing about the OS packages. Trivy recognises DHI's
+  base as Debian, so the guard passes. Without DHI's VEX statements,
+  which the scan is not given, Trivy reads DHI's `+dhiN` packages as
+  plain Debian ones and reports every CVE Debian has not fixed in them,
+  so it over-reports this image
 - REUSE-compliant SPDX headers on every file; licence is **GPL-3.0-only**.
   The image's licences label names only that. Prowlarr's own licence file
   ships in `/app/bin/LICENSE`, where upstream's tarball puts it, and the

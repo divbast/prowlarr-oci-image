@@ -73,22 +73,28 @@ podman run -d --name prowlarr \
   --user 65532:65532 \
   --tmpfs /tmp:size=64m,noexec,nosuid,nodev \
   -v prowlarr-config:/config \
-  -p 8080:8080 \
+  -p 127.0.0.1:8080:8080 \
+  --health-cmd '["/usr/local/bin/divbast-prowlarr","health"]' \
   localhost/prowlarr:dev
 ```
 
-`--read-only-tmpfs=false` is Podman's alone: without it, Podman mounts
-writable tmpfs of its own at `/run`, `/var/tmp` and elsewhere beside the
-read-only root. Docker takes the same command without it.
+`--read-only-tmpfs=false` and `--health-cmd` are Podman's alone. Without
+the first, Podman mounts writable tmpfs of its own at `/run`, `/var/tmp`
+and elsewhere beside the read-only root; without the second, it never
+runs the image's health check, as [Health](#health) says. Docker takes
+the same command without them, and runs the image's `HEALTHCHECK` itself.
 
 Prowlarr serves its UI and API on 8080. **A first start on an empty
-`/config` runs with authentication method `None`, so set authentication
-before you publish the port:** [Authentication](#authentication) says how.
-A first start on an empty `/config`
-migrates a new database and answers `/ping` about 1 to 1.5 s after the
-container starts. A stop (SIGTERM) ends it well inside the engine's
-timeout, with exit 0. Restarting Prowlarr from its UI happens inside the
-same process, so the container keeps running.
+`/config` migrates a new database and leaves authentication method `None`
+with no user, so anyone who can reach the port can use Prowlarr.** That
+is why the command publishes the port on the host's loopback alone. Open
+`http://127.0.0.1:8080` on the host first: Prowlarr's first-run prompt
+sets the authentication method, a username and a password. Only then
+publish the port beyond the host, or put Prowlarr behind your reverse
+proxy. [Authentication](#authentication) says more. A stop (SIGTERM) ends
+Prowlarr well inside the engine's timeout, with exit 0. Restarting it
+from its UI happens inside the same process, so the container keeps
+running.
 
 ### `/config`
 
@@ -100,17 +106,42 @@ definitions.
 
 - A `/config` that 65532 cannot write, such as a bind mount root made, or a
   volume an image run as root left, makes Prowlarr exit 1 at once, with
-  `Access to the path '/config…'` in its log. Change the owner of the
-  directory to 65532 instead of running the image as root: `chown
-  65532:65532 <dir>` as root, or under rootless Podman `podman unshare
-  chown 65532:65532 <dir>`. For a Podman bind mount, the `:U` option does
-  the same at start: `-v ./config:/config:U`.
+  `Access to the path '/config…'` in its log. Give the directory, and
+  everything in it, to 65532 instead of running the image as root: `chown
+  -R 65532:65532 <dir>` as root, or under rootless Podman `podman unshare
+  chown -R 65532:65532 <dir>`. For a Podman bind mount, the `:U` option
+  does the same at start: `-v ./config:/config:U`.
+- On an SELinux host, such as Fedora or RHEL, a bind mount also needs
+  Podman to relabel it, or the container cannot use it: add `:Z`, as in
+  `-v ./config:/config:U,Z`. `/config` is Prowlarr's alone, so the private
+  label `Z` fits it.
 - With no mount at all, the read-only root refuses Prowlarr's first write
   and it stops at once, so the mistake is visible. Nothing would have been
   kept.
 - A startup failure Prowlarr calls non-recoverable, such as a PID file it
   cannot write, exits 3. The image passes `-exitimmediately`; without it
   Prowlarr waits an hour for a key press no one can make in a container.
+
+### Coming from another image
+
+Copy the old `/config` into the new volume or directory, then give it all
+to 65532 as above, with `chown -R`: the files another image wrote are
+usually its PUID's, such as 1000.
+
+This image serves on 8080, not Prowlarr's usual 9696, and its
+`PROWLARR__SERVER__PORT` wins over the old `config.xml`. Prowlarr wrote
+its own address, with the port, into every indexer it synced into Sonarr,
+Radarr, Lidarr and its other apps, and those indexers fail until they
+point at the new one. If the apps reach Prowlarr through a port on the
+host, publishing the new port on the old number (`-p 9696:8080`) keeps
+that address working. Otherwise, in Prowlarr, under Settings, Apps, open
+each application, set its Prowlarr Server to the new address, such as
+`http://prowlarr:8080`, and save, then press Sync App Indexers. Saving an
+application on Full Sync pushes the new address to each of its indexers.
+Prowlarr knows the indexers it made by its records and by its API key,
+which `config.xml` brought along, so the sync updates them rather than
+adding copies. An application on Add and Remove Only gets no updates:
+change the URL of each Prowlarr indexer in that app itself.
 
 ### `/tmp`
 
@@ -133,11 +164,12 @@ while it runs, so size it for the backup and no further.
 Any `config.xml` key can be set as `PROWLARR__<SECTION>__<KEY>`, and the
 environment wins over the file. The image sets `PROWLARR__SERVER__PORT=8080`,
 which also wins over a `config.xml` brought from another image that says
-9696. The keys most needed:
+9696: [Coming from another image](#coming-from-another-image) says what
+that means for the apps Prowlarr syncs to. The keys most needed:
 
 | Variable | What it does |
 |---|---|
-| `PROWLARR__AUTH__METHOD` | `Forms` or `External` (`None` turns authentication off; `Basic` is retired upstream and runs as `Forms`) |
+| `PROWLARR__AUTH__METHOD` | `Forms`, once a user exists, or `External`, behind a proxy that authenticates ([Authentication](#authentication) says why; `None` turns authentication off; `Basic` is retired upstream and runs as `Forms`) |
 | `PROWLARR__AUTH__REQUIRED` | `Enabled`, or `DisabledForLocalAddresses` |
 | `PROWLARR__AUTH__APIKEY` | The API key, over the one in `config.xml` |
 | `PROWLARR__SERVER__URLBASE` | The path a reverse proxy serves Prowlarr under, such as `/prowlarr` |
@@ -147,13 +179,27 @@ which also wins over a `config.xml` brought from another image that says
 
 ### Authentication
 
-**A fresh install starts with the authentication method `None`.** Upstream's
-`AuthenticationRequired` defaults to `Enabled`, but a method of `None`
-leaves nothing to require. **With `None`, anyone who can reach the port
-can download a backup, which holds `config.xml` and so the API key**, and
-can use every indexer and app you have set up. So set
-`PROWLARR__AUTH__METHOD=Forms`, or set it in the UI under Settings,
-General, before publishing the port beyond the host.
+**A fresh install starts with the authentication method `None`, and no
+user.** Upstream's `AuthenticationRequired` defaults to `Enabled`, but a
+method of `None` leaves nothing to require. **With `None`, anyone who can
+reach the port can download a backup, which holds `config.xml` and so the
+API key**, and can use every indexer and app you have set up.
+
+So keep the port on the host's loopback, as [Running](#running) does,
+and open the UI there first. While the method is `None`, Prowlarr opens a
+first-run prompt that sets the method, a username and a password, and
+creates that user. Then publish the port, or put Prowlarr behind your
+proxy. A user is made only there, or later under Settings, General, both
+of which save through `PUT /api/v1/config/host`: the environment has no
+username or password to give.
+
+**Do not set `PROWLARR__AUTH__METHOD=Forms` on a fresh install.** With
+`Forms` in force and no user, there is nobody to log in as, and the
+first-run prompt, which opens only while the method is `None`, never
+appears. Set the variable once a user exists, or set it to `External`
+when Prowlarr sits behind a proxy that authenticates every request
+itself: `External` makes Prowlarr let in everyone who reaches it, so
+nothing but that proxy may.
 
 The probe does not mind which method is in force: it sends the API key,
 which every method accepts.
@@ -217,12 +263,15 @@ A static binary on a mount still runs, unless you mount it from somewhere
 
 ## Hardlinks
 
-Hardlinking needs the source and the destination on one filesystem, so
-give Prowlarr's neighbours, Sonarr and Lidarr, one shared `/data` mount
-and not a mount each for downloads and media. Under `--cap-drop ALL`, the
-kernel's protected-hardlinks rule lets a process link only a file it owns
-or can read and write. If the app's uid, 65532, can do neither, upstream
-copies the file instead.
+Prowlarr imports no files, so this is advice for the apps beside it that
+do, such as Sonarr, Radarr and Lidarr. Hardlinking needs the source and
+the destination on one filesystem, so give those apps and the download
+client one shared `/data` mount, not a mount each for downloads and
+media. Under `--cap-drop ALL`, the kernel's protected-hardlinks rule lets
+a process link only a file it owns or can read and write; when the app's
+uid can do neither, it copies the file instead. On an SELinux host, a
+`/data` bind mount several containers share takes Podman's `:z`, the
+shared label, not `:Z`, which would keep it to one container.
 
 ## PostgreSQL
 
@@ -244,13 +293,8 @@ Docker-media-type manifest, and divbast images are published as an OCI
 index, so Podman's inspection path never looks at the config's healthcheck
 field — [podman/podman#25454](https://github.com/containers/podman/issues/25454)
 and [#18904](https://github.com/containers/podman/issues/18904) track it. A
-Podman user passes it explicitly:
-
-```bash
-podman run -d --health-cmd '["/usr/local/bin/divbast-prowlarr","health"]' localhost/prowlarr:dev
-```
-
-Under a Quadlet, the equivalent is:
+Podman user passes it explicitly, with `--health-cmd` as in
+[Running](#running). Under a Quadlet, the equivalent is:
 
 ```
 HealthCmd=["/usr/local/bin/divbast-prowlarr","health"]
