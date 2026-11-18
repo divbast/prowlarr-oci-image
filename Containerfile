@@ -59,6 +59,12 @@ RUN yarn install --frozen-lockfile --network-timeout 120000 \
 FROM dhi.io/dotnet:10.0.404-sdk-debian13@sha256:40c7a4fd82c981f0df98ced709d21cabfd5491324f567c74b3b0d716477873ae AS backend
 ARG PROWLARR_VERSION
 ARG TARGETARCH
+# With no default of its own, RUNTIME_IMAGE takes the one above, which the
+# runtime stage is built FROM, for the check after the copy to /out/bin.
+# It stands alone, with nothing after it on its line: Renovate reads ARG
+# NAME VALUE as NAME=VALUE, so anything there would become the runtime
+# pin it moves.
+ARG RUNTIME_IMAGE
 # Upstream keeps no lock file, and pins every package by an exact version
 # from nuget.org alone, which signs each one: NuGet checks those signatures
 # here.
@@ -67,14 +73,22 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 WORKDIR /src
 COPY --from=fetch /src ./
+COPY test/global-json.sh /tmp/global-json.sh
+COPY test/runtime-major.sh /tmp/runtime-major.sh
 # The one change made to an upstream file, which never leaves this stage.
 # global.json pins the SDK with no roll-forward policy, which accepts only
 # that feature band, so an SDK of a later band, which Renovate moves this
 # stage's image to, would refuse to build. The script keeps upstream's
 # version as the floor and accepts any later band of the same major and
-# minor, and refuses a global.json it cannot read a version from.
-COPY test/global-json.sh /tmp/global-json.sh
-RUN /tmp/global-json.sh global.json
+# minor, after checking that major and minor are this image's: a .NET
+# major on one side alone fails here, with the steps to take. dotnet asked
+# from / reports the image's own SDK, since no global.json is in the way
+# there; asked from the source, it would refuse before the rewrite.
+# hadolint's DL3003 asks for WORKDIR in place of that cd, which lasts for
+# the one command substitution: WORKDIR would move the whole RUN away from
+# the source.
+# hadolint ignore=DL3003
+RUN sdk=$(cd / && dotnet --version); /tmp/global-json.sh global.json "${sdk}"
 # The properties restore and publish share, one per line, in a response
 # file both read. The version is passed rather than left at upstream's
 # 10.0.0.*, which runs as a development build; -p: overrides it, and the
@@ -104,6 +118,12 @@ RUN rid=$(</tmp/rid); \
     printf '%s\n' "PackageVersion=${PROWLARR_VERSION}" \
         'PackageAuthor=[divbast](https://github.com/divbast/prowlarr-oci-image)' \
         UpdateMethod=Docker Branch=master >/out/package_info
+# An app built for one .NET does not start on another's runtime, and
+# nothing else would say so: the script compares the .NET the shipped
+# runtimeconfigs name with the one leading the runtime image's tag, and
+# fails a mismatch with the steps to take. It reads /out/bin once nothing
+# more is written there, so what it passes is what ships.
+RUN /tmp/runtime-major.sh /out/bin "${RUNTIME_IMAGE}"
 
 # The image's health probe, static and on the standard library alone.
 FROM dhi.io/golang:1.27.4-debian13-dev@sha256:065579ea342afd08d0e1f038866e7f4eed7e913f4be2f29c487db71804fd2506 AS probe

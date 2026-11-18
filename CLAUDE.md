@@ -14,9 +14,10 @@ It publishes to `ghcr.io/divbast/prowlarr`, tagged with Prowlarr's version
 and `latest`, from `build.yml`'s daily slot and its manual run on `main`.
 
 What makes the image this app's lives here: the Containerfile, the health
-probe (`cmd/divbast-prowlarr`, `internal/probe`), `test/global-json.sh`,
-`renovate.json`'s Prowlarr manager, and the acceptance tests. The pipeline
-around it is shared, and reaches this repository at a pinned commit:
+probe (`cmd/divbast-prowlarr`, `internal/probe`), the backend stage's two
+checks (`test/global-json.sh`, `test/runtime-major.sh`), `renovate.json`'s
+Prowlarr manager, and the acceptance tests. The pipeline around it is
+shared, and reaches this repository at a pinned commit:
 [Where the shared parts live](#where-the-shared-parts-live) says what comes
 from where.
 
@@ -194,6 +195,20 @@ breaking change.
   "latestFeature"`, so a later SDK band, which Renovate moves the image to,
   can build; it never ships. A different change to Prowlarr's source is a
   fork, which the design ruled out
+- **Two build-stage checks guard a .NET major**, which would otherwise
+  show only as dotnet's own error, or as an app that will not start.
+  `test/global-json.sh` holds the SDK `global.json` names to the image's
+  major and minor before it rewrites the file; `test/runtime-major.sh`
+  holds the runtimeconfigs copied to `/out/bin` to the runtime image's
+  tag, which the backend stage reads through a bare `ARG RUNTIME_IMAGE`,
+  alone on its line, since Renovate would read anything after it as the
+  runtime pin. Each fails a mismatch with the steps to take, naming
+  [A .NET major](#a-net-major). Each is a build-stage check under "Code
+  quality"'s rules, and its Go test, `test/globaljson` or
+  `test/runtimemajor`, also checks the Containerfile runs it where it
+  must. The two scripts and their tests are oci-image-template's .NET
+  layer's too, byte for byte but for the SPDX line, so a change to one
+  goes to both
 - **The version is always passed.** `-p:AssemblyVersion=${PROWLARR_VERSION}`
   and `-p:AssemblyConfiguration=master` override upstream's `10.0.0.*`,
   which runs as a development build, with Sentry forced on and the API
@@ -220,6 +235,29 @@ breaking change.
   order.** `renovate.json`'s regex manager moves both in one PR, from the
   stable GitHub releases alone, and the fetch stage asserts the release's
   tag still names the commit
+
+## A .NET major
+
+A .NET major moves by hand, about once per LTS, because neither of its two
+pull requests can go green alone: Prowlarr's retargeted release needs the
+new SDK, and the SDK and runtime the Dashboard holds back cannot build or
+run the release before it. The backend stage's two checks fail each with
+a message naming this section; only were Prowlarr to drop its
+`global.json` and retarget first would dotnet's own error come instead.
+Each step needs the user's go-ahead:
+
+1. Prowlarr's Renovate PR, which moves `PROWLARR_VERSION` and
+   `PROWLARR_COMMIT`, is red with one of the checks' messages, where `W`
+   is the new .NET:
+   `ERROR: global.json asks for the .NET W SDK; … Approve the .NET W major …`
+   or `ERROR: the app targets .NET W; … Approve …`.
+2. Approve the major, the "dhi .NET SDK and runtime" group, on the
+   Dependency Dashboard. Renovate opens its PR, red on its own: a check
+   fails it with `ERROR: … A .NET major waits until … retargets …`, which
+   here is expected, and no reason to stop.
+3. On a branch from main, take both Renovate commits with
+   `git cherry-pick -S`, open a PR, and merge it when green.
+4. Close the two Renovate PRs.
 
 ## Where the shared parts live
 
@@ -278,8 +316,8 @@ breaking change.
   gates (the compiler, `go vet`, `go fix -diff`, `go mod tidy -diff`,
   `golangci-lint fmt --diff` and `golangci-lint run`), `go-test`, `reuse
   lint`, hadolint and `docker build --check`. `go-test` runs every Go test
-  under the race detector, `test/globaljson` among them; the acceptance
-  suite skips there, since `IMAGE` is unset
+  under the race detector, `test/globaljson` and `test/runtimemajor`
+  among them; the acceptance suite skips there, since `IMAGE` is unset
 - `just archive`, `just scan` — write the image as an OCI archive, then run
   `divbast-scan` over it and the published `:latest`. Needs network access
   to ghcr.io
