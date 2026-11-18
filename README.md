@@ -62,10 +62,10 @@ of the same major and minor can build it; that file does not ship.
 Pull `ghcr.io/divbast/prowlarr:latest`, which follows Prowlarr's stable
 releases; a version tag, `:<version>` with the Prowlarr release in place
 of `<version>`, pins one. The package page on ghcr.io lists the tags. To
-build it yourself, with Podman to match the
-command below: `docker login dhi.io`, since every image the build starts
-from is Docker Hardened, then `just setup`, then `ENGINE=podman just
-build`, which tags it `localhost/prowlarr:dev`.
+build it yourself: `docker login dhi.io`, since every image the build
+starts from is Docker Hardened, then `just setup`, then `ENGINE=podman
+just build`, which tags it `localhost/prowlarr:dev`. Substitute that tag
+for `ghcr.io/divbast/prowlarr:latest` in the command below.
 
 ```bash
 podman run -d --name prowlarr \
