@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: BSD-2-Clause -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- SPDX-FileCopyrightText: 2026 Aryan Ameri <github@aryan.ameri.coffee> -->
 
 # oci-image-template
@@ -372,11 +372,3 @@ and how to pass it.
 ## AI/LLM Disclosure
 
 This project was developed with significant LLM involvement. Each git commit contains an `Assisted-by:` tag detailing the particular model/tool used.
-
-## Licence
-
-Copyright 2026 Aryan Ameri.
-
-[BSD-2-Clause](LICENSES/BSD-2-Clause.txt)
-
-This project is [REUSE](https://reuse.software/) compliant.

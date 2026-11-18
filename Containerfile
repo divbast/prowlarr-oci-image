@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: BSD-2-Clause
+# SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 Aryan Ameri <github@aryan.ameri.coffee>
 
 # The app's own version, which tags the image: app-publish.yml reads it from
@@ -31,7 +31,7 @@ LABEL org.opencontainers.image.source="https://github.com/divbast/oci-image-temp
     org.opencontainers.image.url="https://github.com/divbast/oci-image-template" \
     org.opencontainers.image.title="oci-image-template" \
     org.opencontainers.image.version="${TEMPLATE_VERSION}" \
-    org.opencontainers.image.licenses="BSD-2-Clause"
+    org.opencontainers.image.licenses="GPL-3.0-only"
 
 EXPOSE 8080 8081
 # Exec form: the shell form would need /bin/sh, which the image lacks.
