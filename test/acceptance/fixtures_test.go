@@ -6,6 +6,7 @@ package acceptance
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -212,11 +213,18 @@ type systemStatus struct {
 	Authentication         string `json:"authentication"`
 }
 
-// logged waits until c's log holds needle, and returns an error, with the
-// log, once within has passed, or at once if c stops.
-func logged(ctx context.Context, c *harness.Container, needle string, within time.Duration) error {
-	deadline := time.Now().Add(within)
-	for {
+// logged reads c's log every 250 ms until it holds needle, and returns an
+// error, with the log, once within has passed, or at once if c stops or
+// the engine fails to answer.
+func logged(ctx context.Context, c *harness.Container, needle string, within time.Duration) error { //nolint:unparam // each caller's own budget, which harness.ServeWithin and restartWithin each happen to set at a minute today
+	// What each look short of needle, c still running, returns: only
+	// these does Poll look again after, and when it stops on one, the
+	// error needs c's log
+	waiting := fmt.Errorf("its log does not say %q", needle)
+	// The engine is asked with ctx rather than the try's own, which the
+	// budget ends: a call it cut short would come back as the engine's
+	// error, returned at once, in place of the budget's
+	err := harness.Poll(ctx, within, 250*time.Millisecond, func(context.Context) error {
 		logs, err := c.Logs(ctx)
 		if err != nil {
 			return err
@@ -230,13 +238,13 @@ func logged(ctx context.Context, c *harness.Container, needle string, within tim
 			return err
 		case !ins.State.Running:
 			return harness.WithLog(ctx, c, fmt.Errorf("the container stopped, exit status %d, before its log said %q", ins.State.ExitCode, needle))
-		case !time.Now().Before(deadline):
-			return harness.WithLog(ctx, c, fmt.Errorf("its log did not say %q within %s", needle, within))
 		}
-		if err := harness.Pause(ctx, 250*time.Millisecond); err != nil {
-			return err
-		}
+		return harness.NotYet(waiting)
+	})
+	if errors.Is(err, waiting) {
+		return harness.WithLog(ctx, c, err)
 	}
+	return err
 }
 
 // errText is err's text, or "ok" for none, for a check's detail.

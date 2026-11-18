@@ -5,6 +5,7 @@ package acceptance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -98,35 +99,33 @@ func TestBackupFitsTmpfs(t *testing.T) {
 	}
 }
 
-// finished polls command id until it is no longer queued or started, and
-// returns it then, or an error once backupWithin has passed.
+// finished asks for command id every 250 ms until it is no longer queued
+// or started, and returns it then, or an error with the last answer once
+// backupWithin has passed. Every answer short of that, a failed request
+// among them, is one to ask again after.
 func finished(ctx context.Context, s *harness.Serving, id int) (command, error) {
 	path := "/api/v1/command/" + strconv.Itoa(id)
-	deadline := time.Now().Add(backupWithin)
-	var last string
-	for {
+	var done command
+	err := harness.Poll(ctx, backupWithin, 250*time.Millisecond, func(ctx context.Context) error {
 		resp, err := api(ctx, s, http.MethodGet, path, nil)
-		var cmd command
 		switch {
 		case err != nil:
-			last = err.Error()
+			return harness.NotYet(err)
 		case resp.Status != http.StatusOK:
-			last = fmt.Sprintf("status %d", resp.Status)
-		default:
-			if err := jsonInto(resp, &cmd); err != nil {
-				last = err.Error()
-				break
-			}
-			if cmd.Status != "queued" && cmd.Status != "started" {
-				return cmd, nil
-			}
-			last = "command status " + cmd.Status
+			return harness.NotYet(fmt.Errorf("status %d", resp.Status))
 		}
-		if !time.Now().Before(deadline) {
-			return command{}, fmt.Errorf("GET %s: still not finished after %s: %s", path, backupWithin, last)
+		var cmd command
+		if err := jsonInto(resp, &cmd); err != nil {
+			return harness.NotYet(err)
 		}
-		if err := harness.Pause(ctx, 250*time.Millisecond); err != nil {
-			return command{}, err
+		if cmd.Status == "queued" || cmd.Status == "started" {
+			return harness.NotYet(errors.New("command status " + cmd.Status))
 		}
+		done = cmd
+		return nil
+	})
+	if err != nil {
+		return command{}, fmt.Errorf("GET %s: %w", path, err)
 	}
+	return done, nil
 }

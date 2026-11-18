@@ -5,6 +5,7 @@ package acceptance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -59,34 +60,43 @@ func TestRestartsInProcess(t *testing.T) {
 }
 
 // servesAgain waits until s's log says Prowlarr is restarting, and then
-// until /ping answers 200, which only the host built after that can. It
-// returns an error at once if the container stops, and once restartWithin
-// has passed.
+// asks for /ping every 250 ms until it answers 200, which only the host
+// built after that can. The two waits share restartWithin. It returns an
+// error at once if the container stops, and once restartWithin has
+// passed.
 func servesAgain(ctx context.Context, s *harness.Serving) error {
+	const every = 250 * time.Millisecond
 	deadline := time.Now().Add(restartWithin)
 	if err := logged(ctx, s.C, restarting, restartWithin); err != nil {
 		return err
 	}
-	for {
-		resp, err := s.Get(ctx, pingPath, nil)
-		if err == nil && resp.Status == http.StatusOK {
-			return nil
-		}
-		last := fmt.Sprintf("status %d", resp.Status)
-		if err != nil {
-			last = err.Error()
-		}
-		ins, err := s.C.Inspect(ctx)
+	// What each answer but 200, the container still running, is wrapped
+	// in: only these does Poll ask again after, and when it stops on one,
+	// the error needs the container's log
+	notServing := fmt.Errorf("GET %s does not answer 200", pingPath)
+	// What is left of restartWithin, though never less than one pause, so
+	// that /ping is asked at least once however long the log took
+	within := max(time.Until(deadline).Round(time.Millisecond), every)
+	err := harness.Poll(ctx, within, every, func(tryCtx context.Context) error {
+		resp, err := s.Get(tryCtx, pingPath, nil)
 		switch {
-		case err != nil:
-			return err
+		case err == nil && resp.Status == http.StatusOK:
+			return nil
+		case err == nil:
+			err = fmt.Errorf("status %d", resp.Status)
+		}
+		// The engine is asked with ctx, as in logged
+		ins, ierr := s.C.Inspect(ctx)
+		switch {
+		case ierr != nil:
+			return ierr
 		case !ins.State.Running:
 			return harness.WithLog(ctx, s.C, fmt.Errorf("the container stopped, exit status %d", ins.State.ExitCode))
-		case !time.Now().Before(deadline):
-			return harness.WithLog(ctx, s.C, fmt.Errorf("GET /ping did not answer 200 within %s: %s", restartWithin, last))
 		}
-		if err := harness.Pause(ctx, 250*time.Millisecond); err != nil {
-			return err
-		}
+		return harness.NotYet(fmt.Errorf("%w: %w", notServing, err))
+	})
+	if errors.Is(err, notServing) {
+		return harness.WithLog(ctx, s.C, err)
 	}
+	return err
 }

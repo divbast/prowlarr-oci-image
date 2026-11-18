@@ -79,22 +79,25 @@ func TestContract(t *testing.T) {
 	})
 }
 
-// pingOK returns once GET /ping, sent from inside c through the probe,
-// answers 200, which Prowlarr does once its database is migrated and its
-// host is up, or an error with the last answer when ctx ends first.
+// pingOK returns once GET /ping, sent from inside c through the probe
+// every second, answers 200, which Prowlarr does once its database is
+// migrated and its host is up, or an error with the last answer when ctx,
+// which bounds the wait, ends first. Every answer short of that, a failed
+// request among them, is one to ask again after.
 func pingOK(ctx context.Context, _ *harness.Container, p *harness.Probe) error {
 	url := fmt.Sprintf("http://127.0.0.1:%d/ping", appPort)
-	for {
+	err := harness.Poll(ctx, 0, time.Second, func(ctx context.Context) error {
 		resp, err := p.HTTP(ctx, http.MethodGet, url, nil, "")
-		if err == nil && resp.Status == http.StatusOK {
-			return nil
+		switch {
+		case err != nil:
+			return harness.NotYet(err)
+		case resp.Status != http.StatusOK:
+			return harness.NotYet(fmt.Errorf("status %d", resp.Status))
 		}
-		last := fmt.Sprintf("status %d", resp.Status)
-		if err != nil {
-			last = err.Error()
-		}
-		if err := harness.Pause(ctx, time.Second); err != nil {
-			return fmt.Errorf("GET %s never answered 200, last %s: %w", url, last, err)
-		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("GET %s never answered 200: %w", url, err)
 	}
+	return nil
 }

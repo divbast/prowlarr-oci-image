@@ -67,14 +67,21 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 WORKDIR /src
 COPY --from=fetch /src ./
+COPY test/global-json.sh /tmp/global-json.sh
 # The one change made to an upstream file, which never leaves this stage.
 # global.json pins the SDK with no roll-forward policy, which accepts only
 # that feature band, so an SDK of a later band, which Renovate moves this
 # stage's image to, would refuse to build. The script keeps upstream's
 # version as the floor and accepts any later band of the same major and
-# minor, and refuses a global.json it cannot read a version from.
-COPY test/global-json.sh /tmp/global-json.sh
-RUN /tmp/global-json.sh global.json
+# minor, after checking that major and minor are this image's: a .NET
+# major on one side alone fails here, with the steps to take. dotnet asked
+# from / reports the image's own SDK, since no global.json is in the way
+# there; asked from the source, it would refuse before the rewrite.
+# hadolint's DL3003 asks for WORKDIR in place of that cd, which lasts for
+# the one command substitution: WORKDIR would move the whole RUN away from
+# the source.
+# hadolint ignore=DL3003
+RUN sdk=$(cd / && dotnet --version); /tmp/global-json.sh global.json "${sdk}"
 # The properties restore and publish share, one per line, in a response
 # file both read. The version is passed rather than left at upstream's
 # 10.0.0.*, which runs as a development build; -p: overrides it, and the
@@ -95,15 +102,43 @@ RUN --network=none dotnet msbuild src/Prowlarr.sln -t:PublishAllRids @/tmp/build
 # /app/bin as upstream's Linux package lays it out, without the Windows and
 # service helpers, and without Prowlarr.Update, the in-app updater the
 # image never runs: package_info names Docker as the update mechanism, and
-# upstream reads it only from beside a directory named bin.
+# upstream reads it only from beside a directory named bin. Publish writes
+# the app under its target framework, _output/net10.0 today, which a .NET
+# major moves, so the folder is found rather than named, and must be the
+# only one: none means publish wrote it somewhere else, and with several
+# nothing says which is the app. nullglob, for the find alone, makes no
+# match an empty list rather than the pattern itself.
 RUN rid=$(</tmp/rid); \
+    shopt -s nullglob; \
+    published=(_output/net*/"${rid}"/publish); \
+    shopt -u nullglob; \
+    if ((${#published[@]} != 1)); then \
+        echo "ERROR: ${#published[@]} folders match _output/net*/${rid}/publish, where publish writes the app to one: ${published[*]:-none}." >&2; \
+        exit 1; \
+    fi; \
     mkdir -p /out/config; \
-    cp -a "_output/net10.0/${rid}/publish" /out/bin; \
+    cp -a "${published[0]}" /out/bin; \
     rm /out/bin/Prowlarr.Windows.* /out/bin/ServiceInstall* /out/bin/ServiceUninstall*; \
     test ! -e /out/bin/Prowlarr.Update; \
     printf '%s\n' "PackageVersion=${PROWLARR_VERSION}" \
         'PackageAuthor=[divbast](https://github.com/divbast/prowlarr-oci-image)' \
         UpdateMethod=Docker Branch=master >/out/package_info
+COPY test/runtime-major.sh /tmp/runtime-major.sh
+# With no default of its own, RUNTIME_IMAGE takes the global one at the
+# top of this file, which the runtime stage is built FROM. It is declared
+# here, for the check alone: BuildKit gives every ARG in scope to each
+# later RUN as its environment, and so to its cache key, and declared any
+# higher it would have a new runtime pin rebuild the restore and publish.
+# It stands alone, with nothing after it on its line: Renovate reads ARG
+# NAME VALUE as NAME=VALUE, so anything there would become the runtime
+# pin it moves.
+ARG RUNTIME_IMAGE
+# An app built for one .NET does not start on another's runtime, and
+# nothing else would say so: the script compares the .NET the shipped
+# runtimeconfigs name with the one leading the runtime image's tag, and
+# fails a mismatch with the steps to take. It reads /out/bin once nothing
+# more is written there, so what it passes is what ships.
+RUN /tmp/runtime-major.sh /out/bin "${RUNTIME_IMAGE}"
 
 # The image's health probe, static and on the standard library alone.
 FROM dhi.io/golang:1.27.4-debian13-dev@sha256:065579ea342afd08d0e1f038866e7f4eed7e913f4be2f29c487db71804fd2506 AS probe

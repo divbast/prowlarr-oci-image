@@ -5,6 +5,7 @@ package acceptance
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/divbast/ci/harness"
@@ -36,6 +37,31 @@ func TestRefusesUnwritableConfig(t *testing.T) {
 	vol := configVolume(t, e)
 	prepare(t, e, image, asRoot, vol, "root-own")
 	harness.Refuses(t, e, refusing(image, vol), unknownFailure, "on a /config root owns", deniedConfig)
+}
+
+// TestLogWaitEndsWhenStopped holds the suite's own helper, not anything
+// the image guarantees: logged, which the tests that wait for a line in
+// Prowlarr's log share, must return the moment the container stops, as
+// it does on a /config root owns, rather than wait out its budget for a
+// line that can no longer come. It asserts on the error, not on the time
+// taken, which a slow runner would make flaky: had logged waited, its
+// error would be Poll's, "still failing after", wrapping the stopped
+// container's.
+func TestLogWaitEndsWhenStopped(t *testing.T) {
+	t.Parallel()
+	e, image := underTest(t)
+	ctx := t.Context()
+	vol := configVolume(t, e)
+	prepare(t, e, image, asRoot, vol, "root-own")
+	c, err := e.Start(ctx, t, refusing(image, vol))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = logged(ctx, c, "a line Prowlarr never logs", harness.ServeWithin)
+	text := errText(err)
+	harness.NewChecks(t).True("logged returns the stopped container's error at once, not its budget's",
+		err != nil && strings.Contains(text, "the container stopped") && !strings.Contains(text, "still failing after"),
+		harness.Clip(text))
 }
 
 // pidUnwritable is what Prowlarr says when it cannot write its PID file.
