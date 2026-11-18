@@ -17,12 +17,14 @@ it does until it is switched on.
 
 ## Base
 
-The image is Prowlarr 3.0.2.5780, built from source at commit `847d4876…`,
-the one its release tag names, on Docker Hardened Images'
-[`aspnetcore`](https://hub.docker.com/hardened-images/catalog) 10 for
+The image is Prowlarr's stable release, built from source: the version and
+commit the Containerfile's `PROWLARR_VERSION` and `PROWLARR_COMMIT` name,
+which are the release and the commit its tag names. It runs on Docker
+Hardened Images'
+[`aspnetcore`](https://hub.docker.com/hardened-images/catalog) for
 Debian 13: the .NET runtime, ICU and OpenSSL, no shell and no package
-manager. It is about 333 MB. The app is built framework-dependent, so
-rebuilding the image patches the runtime. Every stage of the build is also
+manager. The app is built framework-dependent, so rebuilding the image
+patches the runtime. Every stage of the build is also
 a DHI image, and CI refuses to build until Docker's signature on each is
 verified:
 
@@ -79,7 +81,10 @@ podman run -d --name prowlarr \
 writable tmpfs of its own at `/run`, `/var/tmp` and elsewhere beside the
 read-only root. Docker takes the same command without it.
 
-Prowlarr serves its UI and API on 8080. A first start on an empty `/config`
+Prowlarr serves its UI and API on 8080. **A first start on an empty
+`/config` runs with authentication method `None`, so set authentication
+before you publish the port:** [Authentication](#authentication) says how.
+A first start on an empty `/config`
 migrates a new database and answers `/ping` about 1 to 1.5 s after the
 container starts. A stop (SIGTERM) ends it well inside the engine's
 timeout, with exit 0. Restarting Prowlarr from its UI happens inside the
@@ -95,8 +100,11 @@ definitions.
 
 - A `/config` that 65532 cannot write, such as a bind mount root made, or a
   volume an image run as root left, makes Prowlarr exit 1 at once, with
-  `Access to the path '/config…'` in its log. Change the owner
-  of the directory to 65532 instead of running the image as root.
+  `Access to the path '/config…'` in its log. Change the owner of the
+  directory to 65532 instead of running the image as root: `chown
+  65532:65532 <dir>` as root, or under rootless Podman `podman unshare
+  chown 65532:65532 <dir>`. For a Podman bind mount, the `:U` option does
+  the same at start: `-v ./config:/config:U`.
 - With no mount at all, the read-only root refuses Prowlarr's first write
   and it stops at once, so the mistake is visible. Nothing would have been
   kept.
@@ -117,6 +125,8 @@ bytes. To size it for your own, read the size of `prowlarr.db` in the
 `/config` volume, with `ls -l` on the host path `docker volume inspect` or
 `podman volume inspect` gives, double it and keep to 64 MiB or more. For
 example, a 100 MiB database wants `--tmpfs /tmp:size=256m,noexec,nosuid,nodev`.
+A tmpfs counts against the container's memory, and a backup fills it only
+while it runs, so size it for the backup and no further.
 
 ## Configuration
 
@@ -137,11 +147,12 @@ which also wins over a `config.xml` brought from another image that says
 
 ### Authentication
 
-**With the authentication method `None`, anyone who can reach the port can
-download a backup, which holds `config.xml` and so the API key**, and can
-use every indexer and app you have set up. Upstream's `AuthenticationRequired`
-defaults to `Enabled`, but a method of `None` leaves nothing to require.
-Set `PROWLARR__AUTH__METHOD=Forms`, or set it in the UI under Settings,
+**A fresh install starts with the authentication method `None`.** Upstream's
+`AuthenticationRequired` defaults to `Enabled`, but a method of `None`
+leaves nothing to require. **With `None`, anyone who can reach the port
+can download a backup, which holds `config.xml` and so the API key**, and
+can use every indexer and app you have set up. So set
+`PROWLARR__AUTH__METHOD=Forms`, or set it in the UI under Settings,
 General, before publishing the port beyond the host.
 
 The probe does not mind which method is in force: it sends the API key,
@@ -152,8 +163,14 @@ which every method accepts.
 Set `PROWLARR__SERVER__TRUSTEDNETWORKS` to the proxy's address or network,
 such as `172.18.0.0/16`, so that Prowlarr takes the client's address and
 scheme from the headers the proxy sends, and not the proxy's own. Without
-it, every request looks to be from the proxy, which matters to
-`DisabledForLocalAddresses`.
+it, every request looks to be from the proxy.
+
+**Do not use `PROWLARR__AUTH__REQUIRED=DisabledForLocalAddresses` behind a
+proxy** unless the proxy sets `X-Forwarded-For` and is listed in
+`PROWLARR__SERVER__TRUSTEDNETWORKS`. Prowlarr treats a client as local when
+its address is local and the request carries no `X-Forwarded-For` header.
+A proxy on a private network that sends none makes every proxied client
+local, and authentication is skipped for everyone who can reach the proxy.
 
 If the proxy serves Prowlarr under a path, set the URL base, in the
 environment or in the UI. Prowlarr answers nothing at the bare path but a

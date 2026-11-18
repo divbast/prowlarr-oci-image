@@ -212,7 +212,7 @@ breaking change.
   `--network=none` once restored
 - **Every stage is DHI.** The fetch runs in the Node `-dev` image, which
   ships git, the probe in the Go `-dev` image, and the frontend in the same
-  Node image, with yarn 1.22.22 and `--frozen-lockfile`. Never add a stage
+  Node image, with yarn 1 and `--frozen-lockfile`. Never add a stage
   from another publisher, and never set
   `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT`: it breaks indexer feeds
 - **The probe is stdlib Go.** `cmd/divbast-prowlarr` and `internal/probe`
@@ -257,9 +257,9 @@ breaking change.
   refuse workflows that call ci at more than one commit
 - **divbast/renovate-config** holds the presets `renovate.json` extends.
   `renovate.json` adds Prowlarr's manager and rule, and nothing else
-- **divbast/infra** holds the org's settings, this repository's rulesets
-  the `divbast-renovate` App, the `renovate`
-  environment and `PROWLARR_AUTOMERGE`
+- **divbast/infra** holds the org's settings, this repository's rulesets,
+  the `divbast-renovate` App, the `renovate` environment and
+  `PROWLARR_AUTOMERGE`
 
 ## Key commands
 
