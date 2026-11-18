@@ -233,7 +233,11 @@ above. This image has not been tested with it.
 
 A server that answers can still be broken, so the image ships its own probe
 and declares a `HEALTHCHECK`: `--interval=30s --timeout=10s
---start-period=60s --retries=3`. Docker runs it with no configuration.
+--start-period=300s --retries=3`. The start period is long because
+Prowlarr answers nothing until its database migrations finish, and an
+upgrade's can be slow on a large database; the first check that passes
+ends it, so a healthy start loses nothing. Docker runs the check with no
+configuration.
 
 Podman does not. Podman's `libimage` reads a healthcheck only out of a
 Docker-media-type manifest, and divbast images are published as an OCI
@@ -254,7 +258,10 @@ HealthCmd=["/usr/local/bin/divbast-prowlarr","health"]
 
 The array above has no leading `"CMD"` on purpose: Podman before 5.8.0
 re-splits an array that starts with `"CMD"` into one useless token, so
-omitting it is what makes the check work across versions.
+omitting it is what makes the check work across versions. Podman takes
+none of the image's timings either, and by default allows no start
+period: add `--health-start-period=300s` (`HealthStartPeriod=300s` in a
+Quadlet) if an upgrade's migrations could outlast three of its checks.
 
 | | |
 |---|---|

@@ -65,7 +65,7 @@ func TestContract(t *testing.T) {
 			Test:        slices.Concat([]string{"CMD"}, healthCmd),
 			Interval:    30 * time.Second,
 			Timeout:     10 * time.Second,
-			StartPeriod: 60 * time.Second,
+			StartPeriod: 300 * time.Second,
 			Retries:     3,
 		},
 		Env: map[string]string{keyEnv: testAPIKey},

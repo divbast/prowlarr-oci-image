@@ -160,10 +160,16 @@ EXPOSE 8080
 # HEALTHCHECK from an image published as an OCI index: its users pass the
 # same array as --health-cmd. On the machine it was built on, migrating a
 # new /config, Prowlarr answered /ping 0.74 to 1.46 s after the run in 49
-# of 50 runs on Docker and Podman, and 3.5 s after it in the other. The
-# start period leaves room for a slower host and for an upgrade's
-# migrations on a large database.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+# of 50 runs on Docker and Podman, and 3.5 s after it in the other. How
+# long an upgrade's migrations take on a large database was never
+# measured, and Prowlarr listens only once they finish: migrations that
+# outlast the start period and three failed checks get the container
+# marked unhealthy, and autoheal or a Swarm service would then kill it
+# mid-migration. The first check that passes ends the start period, so a
+# long one costs a healthy start nothing; it only delays the verdict on a
+# start that never comes up. Hence 300 s. The contract suite's
+# Healthcheck says the same, and must.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
     CMD ["/usr/local/bin/divbast-prowlarr", "health"]
 USER 65532:65532
 # Prowlarr itself runs as PID 1, with nothing before it. .NET handles

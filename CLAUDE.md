@@ -95,8 +95,11 @@ breaking change.
 - **The HEALTHCHECK's `--timeout` must clear the probe's own budget.** The
   probe allows each half 4 s, one after the other, so 8 s at worst; the
   `HEALTHCHECK`'s 10 s lets the probe print its own line instead of an
-  engine timeout. The `--start-period` of 60 s leaves room for a slow host
-  and for an upgrade's migrations
+  engine timeout. The `--start-period` is 300 s: Prowlarr listens only
+  once its migrations finish, an upgrade's on a large database were never
+  timed, and a container marked unhealthy mid-migration may be killed by
+  autoheal or Swarm. The first passing check ends the start period, so a
+  healthy start loses nothing. The contract's `Healthcheck` must match it
 - **Nothing listens but 8080.** The contract suite reads the kernel's socket
   tables and fails on any other TCP port a process in the container
   listens on, and on any UDP socket one holds. `DOTNET_EnableDiagnostics=0`
