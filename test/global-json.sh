@@ -14,8 +14,8 @@
 # it never leaves the backend stage.
 #
 # The Containerfile's backend stage runs it over its checkout's
-# global.json. test/globaljson runs it over fixtures, and sees each way it
-# can refuse refusing.
+# global.json. test/globaljson runs it over fixtures, and checks each way it
+# can refuse.
 #
 # Exit status: 0 when FILE is rewritten, printing what it now holds; 1
 # when FILE has no sdk.version, or one that is not an SDK version, with an
