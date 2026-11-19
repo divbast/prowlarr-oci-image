@@ -141,7 +141,7 @@ ARG RUNTIME_IMAGE
 RUN /tmp/runtime-major.sh /out/bin "${RUNTIME_IMAGE}"
 
 # The image's health probe, static and on the standard library alone.
-FROM dhi.io/golang:1.27.4-debian13-dev@sha256:4f2f47cb57102345c3247a945c5021913ea1fe740191c4c445a526786e9d1bea AS probe
+FROM dhi.io/golang:1.27.4-debian13-dev@sha256:33b945fd1b09a19688163eb15bc9153b56e2c54b92127810e2cc4511fd6eaee7 AS probe
 ARG PROWLARR_VERSION
 WORKDIR /src
 # go.mod's replace names ./.ci, which the build context leaves out: the
