@@ -39,7 +39,7 @@ concurrency:
 jobs:
   check:
     name: check
-    uses: divbast/ci/.github/workflows/app-check.yml@f23bf2ef7b8ffe566ef8b3a051f5407fd4067b51 # v3.19.0
+    uses: divbast/ci/.github/workflows/app-check.yml@07168ccd821e0e0aceb93a1fd4ea3c1a1508a59d # scan/grype-lookups
     with:
       dhi-username: ${{ vars.DHI_USERNAME }}
     secrets:
@@ -79,7 +79,7 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main'
       && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    uses: divbast/ci/.github/workflows/app-publish.yml@f23bf2ef7b8ffe566ef8b3a051f5407fd4067b51 # v3.19.0
+    uses: divbast/ci/.github/workflows/app-publish.yml@07168ccd821e0e0aceb93a1fd4ea3c1a1508a59d # scan/grype-lookups
     with:
       image: ghcr.io/divbast/prowlarr
       version-arg: PROWLARR_VERSION

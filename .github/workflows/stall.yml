@@ -26,7 +26,7 @@ concurrency:
 jobs:
   stall:
     name: stall
-    uses: divbast/ci/.github/workflows/stall.yml@f23bf2ef7b8ffe566ef8b3a051f5407fd4067b51 # v3.19.0
+    uses: divbast/ci/.github/workflows/stall.yml@07168ccd821e0e0aceb93a1fd4ea3c1a1508a59d # scan/grype-lookups
     with:
       published: ghcr.io/divbast/prowlarr:latest
     permissions:
