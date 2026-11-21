@@ -15,7 +15,7 @@ ARG PROWLARR_COMMIT=847d4876aabf6a31dce5ae40d44ec2ae73ba536b
 # manager, and its nonroot user 65532. The app is built framework-dependent,
 # so a rebuild of this image patches the runtime. CI verifies its signature
 # by Docker before anything is built, as it does every stage's image below.
-ARG RUNTIME_IMAGE=dhi.io/aspnetcore:10.0.15-debian13@sha256:8f0ea1fbeb3ee44b48059d942b93f8cad370420cffdb9b8939ef6473f650485d
+ARG RUNTIME_IMAGE=dhi.io/aspnetcore:10.0.15-debian13@sha256:1ad26fbaa8e691c9ea7d880279aabfeafe7abb430913f60abd595bba6a221e69
 
 # The same image as the frontend's, which ships git and CA certificates.
 FROM dhi.io/node:26.13.1-debian13-dev@sha256:01fb968fd1a4c448008e44db003dcdbc682fee47b964c317388e64118f103d0a AS fetch
@@ -56,7 +56,7 @@ RUN yarn install --frozen-lockfile --network-timeout 120000 \
     && yarn run build --env production
 
 # The backend, framework-dependent for this stage's own architecture.
-FROM dhi.io/dotnet:10.0.404-sdk-debian13@sha256:8a19e4a8a6a36a1198ba86d97145928f0c6c6e160167ab16ced4b21050e1a0fd AS backend
+FROM dhi.io/dotnet:10.0.404-sdk-debian13@sha256:ec51da4084bed110f23ad30481bede5dd42e0bc38caa90ec30641cb4fd1ef248 AS backend
 ARG PROWLARR_VERSION
 ARG TARGETARCH
 # Upstream keeps no lock file, and pins every package by an exact version
