@@ -18,7 +18,7 @@ ARG PROWLARR_COMMIT=847d4876aabf6a31dce5ae40d44ec2ae73ba536b
 ARG RUNTIME_IMAGE=dhi.io/aspnetcore:10.0.15-debian13@sha256:eb133a7e0d3451d528b451326b538460466bfdc6b86cc274a2e290f4ef128d92
 
 # The same image as the frontend's, which ships git and CA certificates.
-FROM dhi.io/node:26.13.1-debian13-dev@sha256:f93de13abcc8050541e2787a7ef71e776e197545b66f3479d57fbfc2c937609f AS fetch
+FROM dhi.io/node:26.13.1-debian13-dev@sha256:dc9c579c8666127214312d953f456924bc1c57d4c0c367c40532fe6ef01d831b AS fetch
 ARG PROWLARR_VERSION
 ARG PROWLARR_COMMIT
 # git checks a fetch by commit against its hash. The tag is asked for
@@ -49,7 +49,7 @@ RUN set -eux; \
 
 # The UI, as upstream's build.sh builds it, into _output/UI. yarn 1.22.22
 # ships in the image, and yarn.lock pins every package by its sha512.
-FROM dhi.io/node:26.13.1-debian13-dev@sha256:f93de13abcc8050541e2787a7ef71e776e197545b66f3479d57fbfc2c937609f AS frontend
+FROM dhi.io/node:26.13.1-debian13-dev@sha256:dc9c579c8666127214312d953f456924bc1c57d4c0c367c40532fe6ef01d831b AS frontend
 WORKDIR /src
 COPY --from=fetch /src ./
 RUN yarn install --frozen-lockfile --network-timeout 120000 \
