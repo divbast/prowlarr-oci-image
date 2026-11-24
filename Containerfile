@@ -8,8 +8,8 @@
 # assemblies carry it, and the probe compares it with the version Prowlarr
 # reports. The fetch stage checks out the commit and asserts the release's
 # tag still names it.
-ARG PROWLARR_VERSION=3.0.2.5780
-ARG PROWLARR_COMMIT=847d4876aabf6a31dce5ae40d44ec2ae73ba536b
+ARG PROWLARR_VERSION=3.1.0.5799
+ARG PROWLARR_COMMIT=b0b5774bf3bd594d0fb2dcd151495b5d034920ef
 # The runtime: Docker Hardened Images' ASP.NET Core on Debian 13, with ICU,
 # OpenSSL and the .NET runtime the app runs on, no shell and no package
 # manager, and its nonroot user 65532. The app is built framework-dependent,
